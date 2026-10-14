@@ -44,6 +44,9 @@ mvn spring-boot:run
 
 API: `http://localhost:8080`
 
+**Swagger UI:** `http://localhost:8080/swagger-ui.html`  
+Use **Authorize → WebhookBearer** with `dev-webhook-secret` (or your `WEBHOOK_SECRET`), then **Try it out** on `POST /webhooks/app` to add live app events. For `/api/**` calls, first run `POST /api/auth/login` with the UI password.
+
 ### 2) Frontend (dev)
 
 ```bash

@@ -40,6 +40,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/me").permitAll()
                         .requestMatchers(HttpMethod.POST, "/webhooks/app").permitAll()
+                        .requestMatchers(
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs",
+                                "/v3/api-docs/**").permitAll()
                         .requestMatchers("/h2-console", "/h2-console/**").permitAll()
                         .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico",
                                 "/login", "/lookup", "/segments", "/analytics", "/assistant").permitAll()

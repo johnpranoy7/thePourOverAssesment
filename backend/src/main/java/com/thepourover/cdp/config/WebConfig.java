@@ -30,7 +30,10 @@ public class WebConfig implements WebMvcConfigurer {
                         if (requested.exists() && requested.isReadable()) {
                             return requested;
                         }
-                        if (resourcePath.startsWith("api/") || resourcePath.startsWith("webhooks/")) {
+                        if (resourcePath.startsWith("api/")
+                                || resourcePath.startsWith("webhooks/")
+                                || resourcePath.startsWith("swagger-ui")
+                                || resourcePath.startsWith("v3/api-docs")) {
                             return null;
                         }
                         return new ClassPathResource("/static/index.html");

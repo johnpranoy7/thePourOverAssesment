@@ -41,6 +41,15 @@ cdp:
   today: "2026-09-28"
   seed-on-startup: true
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+    try-it-out-enabled: true
+
 logging:
   level:
     com.thepourover.cdp: INFO
