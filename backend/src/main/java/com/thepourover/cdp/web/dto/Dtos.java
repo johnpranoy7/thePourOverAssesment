@@ -41,7 +41,7 @@ public final class Dtos {
             List<AppEventView> appEvents) {
     }
 
-    public record SegmentMember(
+    public record AnalyticsMember(
             String subscriberRef,
             String maskedEmail,
             String status,
@@ -52,7 +52,7 @@ public final class Dtos {
     }
 
     /** AI-safe member — no email fields. */
-    public record RedactedSegmentMember(
+    public record RedactedAnalyticsMember(
             String subscriberRef,
             String status,
             String acquisitionSource,
@@ -61,23 +61,23 @@ public final class Dtos {
             int engagementScore) {
     }
 
-    public record SegmentMeta(String id, String name, String description, long count) {
+    public record AnalyticsMeta(String id, String name, String description, long count) {
     }
 
-    public record SegmentResult(
+    public record AnalyticsResult(
             String id,
             String name,
             String description,
             long count,
-            List<SegmentMember> members) {
+            List<AnalyticsMember> members) {
     }
 
-    public record RedactedSegmentResult(
+    public record RedactedAnalyticsResult(
             String id,
             String name,
             String description,
             long count,
-            List<RedactedSegmentMember> members) {
+            List<RedactedAnalyticsMember> members) {
     }
 
     public record GrowthSnapshot(

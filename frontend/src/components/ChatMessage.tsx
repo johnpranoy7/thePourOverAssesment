@@ -21,6 +21,17 @@ function isTableRow(line: string): boolean {
   return t.startsWith("|") && t.includes("|", 1);
 }
 
+/** Render `**bold**` spans; leave unmatched markers as plain text. */
+function renderInlineMarkdown(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
 /** Split assistant markdown into text + pipe tables. */
 export function parseMessageBlocks(content: string): Block[] {
   const lines = content.replace(/\r\n/g, "\n").split("\n");
@@ -79,7 +90,7 @@ export default function ChatMessage({
         if (block.type === "text") {
           return (
             <p key={idx} className="chat-text">
-              {block.text}
+              {renderInlineMarkdown(block.text)}
             </p>
           );
         }
@@ -89,7 +100,7 @@ export default function ChatMessage({
               <thead>
                 <tr>
                   {block.headers.map((h, hIdx) => (
-                    <th key={hIdx}>{h}</th>
+                    <th key={hIdx}>{renderInlineMarkdown(h)}</th>
                   ))}
                 </tr>
               </thead>
@@ -97,7 +108,7 @@ export default function ChatMessage({
                 {block.rows.map((row, rIdx) => (
                   <tr key={rIdx}>
                     {row.map((cell, cIdx) => (
-                      <td key={cIdx}>{cell}</td>
+                      <td key={cIdx}>{renderInlineMarkdown(cell)}</td>
                     ))}
                   </tr>
                 ))}

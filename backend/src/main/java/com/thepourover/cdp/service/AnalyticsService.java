@@ -13,15 +13,20 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.*;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+/**
+ * Growth analytics queries. Three first-class cuts (open activity, most engaged, new subscribers)
+ * plus snapshot helpers. CSV export always goes through {@link #toCsv(AnalyticsResult)}.
+ */
 @Service
-public class SegmentService {
+public class AnalyticsService {
 
-    public record SegmentDef(String id, String name, String description, Predicate<Subscriber> filter,
-                             boolean sortByEngagement) {
-    }
+    public static final String OPEN_ACTIVITY = "open-activity";
+    public static final String MOST_ENGAGED = "most-engaged";
+    public static final String NEW_SUBSCRIBERS = "new-subscribers";
+
+    private static final int DEFAULT_EXPORT_LIMIT = 5000;
 
     /** Precomputed engagement points from a few aggregate queries (no per-subscriber lookups). */
     private record EngagementIndex(Map<Long, Integer> appPoints, Map<Long, Integer> webVisits) {
@@ -43,7 +48,7 @@ public class SegmentService {
     private final PiiService piiService;
     private final CdpProperties properties;
 
-    public SegmentService(
+    public AnalyticsService(
             SubscriberRepository subscriberRepository,
             WebEventRepository webEventRepository,
             AppEventRepository appEventRepository,
@@ -58,194 +63,153 @@ public class SegmentService {
         this.properties = properties;
     }
 
-    private List<SegmentDef> defs(EngagementIndex engagement, Set<Long> subscribersWithWebVisits) {
+    // ---- Catalog (Analytics tabs) ----
+
+    @Transactional(readOnly = true)
+    public List<AnalyticsMeta> listTabs() {
+        EngagementIndex engagement = loadEngagementIndex();
+        Set<Long> withVisits = subscribersWithWebVisits();
         LocalDate today = properties.today();
-        LocalDate coldCutoff = today.minusDays(30);
+
+        long openActivityDefault = openActivity("instagram", "inactive", 30, 0).count();
+        long mostEngaged = subscriberRepository.findByStubFalse().stream()
+                .filter(s -> engagement.score(s) > 0)
+                .count();
         LocalDate newCutoff = today.minusDays(30);
+        long newSubs = subscriberRepository.findByStubFalse().stream()
+                .filter(s -> s.getSignupDate() != null
+                        && !s.getSignupDate().isBefore(newCutoff)
+                        && s.getId() != null
+                        && withVisits.contains(s.getId()))
+                .count();
+
         return List.of(
-                new SegmentDef(
-                        "instagram-cold-30d",
+                new AnalyticsMeta(
+                        OPEN_ACTIVITY,
                         "Source & open activity",
-                        "Default: Instagram with no open in 30 days (as of " + today
-                                + "). Use the tab controls to change source, active vs inactive, and day window.",
-                        s -> !s.isStub()
-                                && "instagram".equalsIgnoreCase(nullToEmpty(s.getAcquisitionSource()))
-                                && isCold(s, coldCutoff),
-                        false),
-                new SegmentDef(
-                        "most-engaged",
+                        "Filter by acquisition source and active vs inactive opens (default: Instagram cold 30d as of "
+                                + today + ").",
+                        openActivityDefault),
+                new AnalyticsMeta(
+                        MOST_ENGAGED,
                         "Most engaged readers",
                         "Newsletter profiles ranked by opens, story reads, app opens, and site visits.",
-                        s -> !s.isStub() && engagement.score(s) > 0,
-                        true),
-                new SegmentDef(
-                        "new-subscriber-first-pages",
+                        mostEngaged),
+                new AnalyticsMeta(
+                        NEW_SUBSCRIBERS,
                         "New subscribers",
-                        "Signed up in the last 30 days (as of " + today
-                                + ") with at least one linked web visit. Use the tab to change the day window.",
-                        s -> !s.isStub()
-                                && s.getSignupDate() != null
-                                && !s.getSignupDate().isBefore(newCutoff)
-                                && s.getId() != null
-                                && subscribersWithWebVisits.contains(s.getId()),
-                        false)
-        );
+                        "Signed up in the last N days (default 30 as of " + today
+                                + ") with at least one linked web visit.",
+                        newSubs));
     }
 
-    @Transactional(readOnly = true)
-    public List<SegmentMeta> listSegments() {
-        EngagementIndex engagement = loadEngagementIndex();
-        Set<Long> withVisits = subscribersWithWebVisits();
-        List<Subscriber> all = subscriberRepository.findByStubFalse();
-        List<SegmentMeta> out = new ArrayList<>();
-        for (SegmentDef def : defs(engagement, withVisits)) {
-            long count = all.stream().filter(def.filter()).count();
-            out.add(new SegmentMeta(def.id(), def.name(), def.description(), count));
-        }
-        return out;
-    }
+    // ---- Queries ----
 
     @Transactional(readOnly = true)
-    public SegmentResult runSegment(String id, int limit) {
-        return runSegment(id, limit, null);
-    }
-
-    /**
-     * @param days optional window; for {@code new-subscriber-first-pages} overrides the default 30-day signup window.
-     */
-    @Transactional(readOnly = true)
-    public SegmentResult runSegment(String id, int limit, Integer days) {
-        if ("new-subscriber-first-pages".equals(id) && days != null) {
-            return newSubscribers(days, limit);
-        }
+    public AnalyticsResult openActivity(String source, String activity, Integer days, int limit) {
+        requireNonNegativeDays(days);
+        String mode = normalizeActivity(activity);
+        int window = days == null ? ("active".equals(mode) ? 2 : 30) : days;
 
         EngagementIndex engagement = loadEngagementIndex();
-        Set<Long> withVisits = subscribersWithWebVisits();
-        SegmentDef def = defs(engagement, withVisits).stream()
-                .filter(d -> d.id().equals(id))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unknown segment: " + id));
+        LocalDate today = properties.today();
+        LocalDate boundary = today.minusDays(window);
+        String src = blankToNull(source);
 
         List<Subscriber> matched = subscriberRepository.findByStubFalse().stream()
-                .filter(def.filter())
+                .filter(s -> src == null || src.equalsIgnoreCase(nullToEmpty(s.getAcquisitionSource())))
+                .filter(s -> "active".equals(mode) ? isRecentlyActive(s, boundary) : isCold(s, boundary))
                 .collect(Collectors.toCollection(ArrayList::new));
-        if (def.sortByEngagement()) {
-            matched.sort(Comparator.comparingInt(engagement::score).reversed());
-        }
-        List<SegmentMember> members = matched.stream()
-                .limit(limit)
-                .map(s -> toMember(s, engagement.score(s)))
-                .toList();
-        return new SegmentResult(def.id(), def.name(), def.description(), matched.size(), members);
+
+        return buildResult(
+                OPEN_ACTIVITY,
+                "Source & open activity",
+                describeOpenActivity(src, mode, window, today, boundary),
+                matched,
+                engagement,
+                limit,
+                false);
     }
 
     @Transactional(readOnly = true)
-    public SegmentResult newSubscribers(int days, int limit) {
-        if (days < 0) {
-            throw new IllegalArgumentException("days must be a whole number of 0 or more");
-        }
+    public AnalyticsResult mostEngaged(int limit) {
+        EngagementIndex engagement = loadEngagementIndex();
+        List<Subscriber> matched = subscriberRepository.findByStubFalse().stream()
+                .filter(s -> engagement.score(s) > 0)
+                .collect(Collectors.toCollection(ArrayList::new));
+        return buildResult(
+                MOST_ENGAGED,
+                "Most engaged readers",
+                "Newsletter profiles ranked by opens, story reads, app opens, and site visits.",
+                matched,
+                engagement,
+                limit,
+                true);
+    }
+
+    @Transactional(readOnly = true)
+    public AnalyticsResult newSubscribers(int days, int limit) {
+        requireNonNegativeDays(days);
         EngagementIndex engagement = loadEngagementIndex();
         Set<Long> withVisits = subscribersWithWebVisits();
         LocalDate today = properties.today();
         LocalDate cutoff = today.minusDays(days);
+
         List<Subscriber> matched = subscriberRepository.findByStubFalse().stream()
                 .filter(s -> s.getSignupDate() != null
                         && !s.getSignupDate().isBefore(cutoff)
                         && s.getId() != null
                         && withVisits.contains(s.getId()))
                 .collect(Collectors.toCollection(ArrayList::new));
-        List<SegmentMember> members = matched.stream()
-                .limit(limit)
-                .map(s -> toMember(s, engagement.score(s)))
-                .toList();
-        return new SegmentResult(
-                "new-subscriber-first-pages",
+
+        return buildResult(
+                NEW_SUBSCRIBERS,
                 "New subscribers",
-                "Signed up in the last " + days + " day" + (days == 1 ? "" : "s")
+                "Signed up in the last " + days + dayWord(days)
                         + " (as of " + today + "; signup on/after " + cutoff
                         + ") with at least one linked web visit.",
-                matched.size(),
-                members);
+                matched,
+                engagement,
+                limit,
+                false);
     }
 
-    @Transactional(readOnly = true)
-    public RedactedSegmentResult runSegmentRedacted(String id, int limit) {
-        SegmentResult result = runSegment(id, limit);
-        List<RedactedSegmentMember> members = result.members().stream()
-                .map(m -> new RedactedSegmentMember(
-                        m.subscriberRef(),
-                        m.status(),
-                        m.acquisitionSource(),
-                        m.signupDate(),
-                        m.lastOpenDate(),
-                        m.engagementScore()))
-                .toList();
-        RedactedSegmentResult redacted = new RedactedSegmentResult(
-                result.id(), result.name(), result.description(), result.count(), members);
-        piiService.assertNoEmails(redacted, "runSegmentRedacted");
-        return redacted;
-    }
-
-    /**
-     * @param activity {@code inactive} = no open for at least {@code days};
-     *                 {@code active} = opened within the last {@code days}.
-     */
-    @Transactional(readOnly = true)
-    public SegmentResult customSegment(String source, String activity, Integer days, int limit) {
-        if (days != null && days < 0) {
-            throw new IllegalArgumentException("days must be a whole number of 0 or more");
-        }
-        String mode = normalizeActivity(activity);
-        int window = days == null ? ("active".equals(mode) ? 2 : 10) : days;
-
-        EngagementIndex engagement = loadEngagementIndex();
-        LocalDate today = properties.today();
-        LocalDate boundary = today.minusDays(window);
-        String src = source == null ? null : source.toLowerCase(Locale.ROOT);
-
-        List<Subscriber> matched = subscriberRepository.findByStubFalse().stream()
-                .filter(s -> src == null || src.equalsIgnoreCase(nullToEmpty(s.getAcquisitionSource())))
-                .filter(s -> "active".equals(mode) ? isRecentlyActive(s, boundary) : isCold(s, boundary))
-                .toList();
-        List<SegmentMember> members = matched.stream()
-                .limit(limit)
-                .map(s -> toMember(s, engagement.score(s)))
-                .toList();
-
-        String sourceLabel = source == null || source.isBlank() ? "any source" : source;
-        String activityLabel = "active".equals(mode)
-                ? ("opened within the last " + window + " day" + (window == 1 ? "" : "s")
-                        + " (as of " + today + "; last open on/after " + boundary + ")")
-                : ("no open for at least " + window + " day" + (window == 1 ? "" : "s")
-                        + " (as of " + today + "; last open before " + boundary + ")");
-        return new SegmentResult(
-                "custom",
-                "Custom filter",
-                sourceLabel + " · " + activityLabel,
-                matched.size(),
-                members);
-    }
-
-    /** Backward-compatible overload used by older callers (inactive / cold window). */
-    @Transactional(readOnly = true)
-    public SegmentResult customSegment(String source, Integer inactiveDays, int limit) {
-        return customSegment(source, "inactive", inactiveDays, limit);
-    }
+    // ---- Redacted (AI tools) ----
 
     @Transactional(readOnly = true)
-    public RedactedSegmentResult customSegmentRedacted(
+    public RedactedAnalyticsResult openActivityRedacted(
             String source, String activity, Integer days, int limit) {
-        SegmentResult result = customSegment(source, activity, days, limit);
-        List<RedactedSegmentMember> members = result.members().stream()
-                .map(m -> new RedactedSegmentMember(
-                        m.subscriberRef(), m.status(), m.acquisitionSource(),
-                        m.signupDate(), m.lastOpenDate(), m.engagementScore()))
-                .toList();
-        RedactedSegmentResult redacted = new RedactedSegmentResult(
-                result.id(), result.name(), result.description(), result.count(), members);
-        piiService.assertNoEmails(redacted, "customSegmentRedacted");
-        return redacted;
+        return toRedacted(openActivity(source, activity, days, limit));
     }
+
+    @Transactional(readOnly = true)
+    public RedactedAnalyticsResult mostEngagedRedacted(int limit) {
+        return toRedacted(mostEngaged(limit));
+    }
+
+    @Transactional(readOnly = true)
+    public RedactedAnalyticsResult newSubscribersRedacted(int days, int limit) {
+        return toRedacted(newSubscribers(days, limit));
+    }
+
+    // ---- Export ----
+
+    @Transactional(readOnly = true)
+    public String exportOpenActivityCsv(String source, String activity, Integer days) {
+        return toCsv(openActivity(source, activity, days, DEFAULT_EXPORT_LIMIT));
+    }
+
+    @Transactional(readOnly = true)
+    public String exportMostEngagedCsv() {
+        return toCsv(mostEngaged(DEFAULT_EXPORT_LIMIT));
+    }
+
+    @Transactional(readOnly = true)
+    public String exportNewSubscribersCsv(int days) {
+        return toCsv(newSubscribers(days, DEFAULT_EXPORT_LIMIT));
+    }
+
+    // ---- Snapshot / pages ----
 
     @Transactional(readOnly = true)
     public SnapshotResponse snapshot() {
@@ -256,7 +220,7 @@ public class SegmentService {
                     : String.valueOf(row[0]).toLowerCase(Locale.ROOT);
             mix.put(key, ((Number) row[1]).longValue());
         }
-        long cold = runSegment("instagram-cold-30d", 0).count();
+        long coldInstagram30d = openActivity("instagram", "inactive", 30, 0).count();
         List<RecentEvent> recent = appEventRepository.findTop50ByOrderByTimestampDesc().stream()
                 .limit(20)
                 .map(e -> new RecentEvent(
@@ -276,14 +240,15 @@ public class SegmentService {
                 appUserRepository.count(),
                 webEventRepository.countBySubscriberIsNotNull(),
                 mix,
-                cold,
+                coldInstagram30d,
                 recent.size());
         return new SnapshotResponse(snap, recent);
     }
 
     @Transactional(readOnly = true)
-    public List<PageCount> topPagesForNewSubscribers(int limit) {
-        LocalDate cutoff = properties.today().minusDays(30);
+    public List<PageCount> topPagesForNewSubscribers(int signupDays, int limit) {
+        requireNonNegativeDays(signupDays);
+        LocalDate cutoff = properties.today().minusDays(signupDays);
         Map<String, Long> counts = new HashMap<>();
         for (Subscriber s : subscriberRepository.findByStubFalse()) {
             if (s.getSignupDate() == null || s.getSignupDate().isBefore(cutoff)) {
@@ -303,25 +268,46 @@ public class SegmentService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
-    public String exportCsv(String id) {
-        return exportCsv(id, null);
+    // ---- Internals ----
+
+    private AnalyticsResult buildResult(
+            String id,
+            String name,
+            String description,
+            List<Subscriber> matched,
+            EngagementIndex engagement,
+            int limit,
+            boolean sortByEngagement) {
+        if (sortByEngagement) {
+            matched.sort(Comparator.comparingInt(engagement::score).reversed());
+        }
+        List<AnalyticsMember> members = matched.stream()
+                .limit(Math.max(0, limit))
+                .map(s -> toMember(s, engagement.score(s)))
+                .toList();
+        return new AnalyticsResult(id, name, description, matched.size(), members);
     }
 
-    @Transactional(readOnly = true)
-    public String exportCsv(String id, Integer days) {
-        return toCsv(runSegment(id, 5000, days));
+    private RedactedAnalyticsResult toRedacted(AnalyticsResult result) {
+        List<RedactedAnalyticsMember> members = result.members().stream()
+                .map(m -> new RedactedAnalyticsMember(
+                        m.subscriberRef(),
+                        m.status(),
+                        m.acquisitionSource(),
+                        m.signupDate(),
+                        m.lastOpenDate(),
+                        m.engagementScore()))
+                .toList();
+        RedactedAnalyticsResult redacted = new RedactedAnalyticsResult(
+                result.id(), result.name(), result.description(), result.count(), members);
+        piiService.assertNoEmails(redacted, "analytics");
+        return redacted;
     }
 
-    @Transactional(readOnly = true)
-    public String exportCustomCsv(String source, String activity, Integer days) {
-        return toCsv(customSegment(source, activity, days, 5000));
-    }
-
-    private String toCsv(SegmentResult result) {
+    private String toCsv(AnalyticsResult result) {
         StringBuilder sb = new StringBuilder();
         sb.append("subscriber_ref,masked_email,status,acquisition_source,signup_date,last_open_date,engagement_score\n");
-        for (SegmentMember m : result.members()) {
+        for (AnalyticsMember m : result.members()) {
             sb.append(csv(m.subscriberRef())).append(',')
                     .append(csv(m.maskedEmail())).append(',')
                     .append(csv(m.status())).append(',')
@@ -364,8 +350,8 @@ public class SegmentService {
         return new HashSet<>(webEventRepository.findDistinctSubscriberIdsWithVisits());
     }
 
-    private SegmentMember toMember(Subscriber s, int engagementScore) {
-        return new SegmentMember(
+    private AnalyticsMember toMember(Subscriber s, int engagementScore) {
+        return new AnalyticsMember(
                 piiService.subscriberRef(s.getEmail()),
                 piiService.maskEmail(s.getEmail()),
                 s.getStatus(),
@@ -375,14 +361,27 @@ public class SegmentService {
                 engagementScore);
     }
 
-    private static boolean isCold(Subscriber s, LocalDate cutoff) {
-        if (s.getLastOpenDate() == null) {
-            return true;
+    private static String describeOpenActivity(
+            String source, String mode, int window, LocalDate today, LocalDate boundary) {
+        String sourceLabel = source == null ? "any source" : source;
+        if ("active".equals(mode)) {
+            return sourceLabel + " · opened within the last " + window + dayWord(window)
+                    + " (as of " + today + "; last open on/after " + boundary + ")";
         }
-        return s.getLastOpenDate().isBefore(cutoff);
+        return sourceLabel + " · no open for at least " + window + dayWord(window)
+                + " (as of " + today + "; last open before " + boundary + ")";
     }
 
-    /** Opened on or after the window start (inclusive). Never-opened readers are excluded. */
+    private static void requireNonNegativeDays(Integer days) {
+        if (days != null && days < 0) {
+            throw new IllegalArgumentException("days must be a whole number of 0 or more");
+        }
+    }
+
+    private static boolean isCold(Subscriber s, LocalDate cutoff) {
+        return s.getLastOpenDate() == null || s.getLastOpenDate().isBefore(cutoff);
+    }
+
     private static boolean isRecentlyActive(Subscriber s, LocalDate windowStart) {
         return s.getLastOpenDate() != null && !s.getLastOpenDate().isBefore(windowStart);
     }
@@ -401,8 +400,19 @@ public class SegmentService {
         throw new IllegalArgumentException("activity must be active or inactive");
     }
 
+    private static String blankToNull(String s) {
+        if (s == null || s.isBlank()) {
+            return null;
+        }
+        return s.trim().toLowerCase(Locale.ROOT);
+    }
+
     private static String nullToEmpty(String s) {
         return s == null ? "" : s;
+    }
+
+    private static String dayWord(int days) {
+        return days == 1 ? " day" : " days";
     }
 
     private static String csv(String value) {

@@ -35,20 +35,17 @@ export const api = {
   snapshot: () => request<SnapshotResponse>("/api/snapshot"),
   profile: (email: string) =>
     request<ProfileResponse>(`/api/profiles?email=${encodeURIComponent(email)}`),
-  segments: () => request<{ segments: SegmentMeta[] }>("/api/segments"),
-  runSegment: (id: string, days?: string) => {
-    const params = new URLSearchParams();
-    if (days) params.set("days", days);
-    const q = params.toString();
-    return request<SegmentResult>(`/api/segments/${encodeURIComponent(id)}${q ? `?${q}` : ""}`);
-  },
-  customSegment: (source: string, activity: "active" | "inactive", days: string) => {
+  analyticsTabs: () => request<{ tabs: AnalyticsMeta[] }>("/api/analytics"),
+  openActivity: (source: string, activity: "active" | "inactive", days: string) => {
     const params = new URLSearchParams();
     if (source) params.set("source", source);
     params.set("activity", activity);
     params.set("days", days);
-    return request<SegmentResult>(`/api/segments?${params}`);
+    return request<AnalyticsResult>(`/api/analytics/open-activity?${params}`);
   },
+  mostEngaged: () => request<AnalyticsResult>("/api/analytics/most-engaged"),
+  newSubscribers: (days: string) =>
+    request<AnalyticsResult>(`/api/analytics/new-subscribers?days=${encodeURIComponent(days)}`),
   chat: (message: string, conversationId: string, reset = false) =>
     request<{ answer: string; conversationId: string }>("/api/chat", {
       method: "POST",
@@ -106,14 +103,14 @@ export type ProfileResponse = {
   }>;
 };
 
-export type SegmentMeta = {
+export type AnalyticsMeta = {
   id: string;
   name: string;
   description: string;
   count: number;
 };
 
-export type SegmentResult = {
+export type AnalyticsResult = {
   id: string;
   name: string;
   description: string;

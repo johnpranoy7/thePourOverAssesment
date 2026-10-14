@@ -5,7 +5,7 @@ import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import SnapshotPage from "./pages/SnapshotPage";
 import LookupPage from "./pages/LookupPage";
-import SegmentsPage from "./pages/SegmentsPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 import AssistantPage from "./pages/AssistantPage";
 
 export default function App() {
@@ -39,7 +39,7 @@ export default function App() {
       >
         <Route path="/" element={<SnapshotPage />} />
         <Route path="/lookup" element={<LookupPage />} />
-        <Route path="/analytics" element={<SegmentsPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/segments" element={<Navigate to="/analytics" replace />} />
         <Route path="/assistant" element={<AssistantPage />} />
       </Route>

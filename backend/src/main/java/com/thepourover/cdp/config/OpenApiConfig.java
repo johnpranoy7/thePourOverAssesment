@@ -29,7 +29,7 @@ public class OpenApiConfig {
                                 WebhookBearer = your `WEBHOOK_SECRET`, default `dev-webhook-secret`).
 
                                 **UI session APIs** (`/api/**`): log in via `POST /api/auth/login` first \
-                                (cookie session), then call lookup / segments / snapshot / chat / reseed.
+                                (cookie session), then call lookup / analytics / snapshot / chat / reseed.
                                 """)
                         .version("0.0.1")
                         .contact(new Contact().name("The Pour Over CDP")))

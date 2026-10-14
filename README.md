@@ -15,11 +15,11 @@ After deploy, fill these in for your submission:
 
 1. Loads `subscribers.csv`, `web_events.csv`, `app_users.csv` once at startup into H2
 2. Lookup a subscriber (newsletter + site visits + app activity)
-3. Preset / custom segments (e.g. Instagram cold 30 days; “today” = **2026-09-28**)
+3. Analytics queries (e.g. Instagram cold 30 days; “today” = **2026-09-28**)
 4. Live `POST /webhooks/app` with Bearer auth (dedupe, out-of-order, anon→login merge)
 5. Growth assistant via Spring AI tools that never return raw emails
 
-**Surprises:** Growth snapshot home, live webhook ticker, masked segment CSV export.
+**Surprises:** Growth snapshot home, live webhook ticker, masked analytics CSV export.
 
 ## Quick start
 
@@ -102,7 +102,7 @@ No OAuth / Auth server / JWT issuer. Two independent secrets on purpose.
 
 ## PII boundary (assistant)
 
-- Tools in `backend/.../ai/CdpTools.java` call the same segment/snapshot services as the UI
+- Tools in `backend/.../ai/CdpTools.java` call the same analytics/snapshot services as the UI
 - Tool return types use `subscriberRef` (HMAC-SHA256 with `PII_HASH_SALT`) — no email fields
 - Chat user text is email-redacted before the model call (`PiiService.redactEmailsInText`)
 - Human Lookup may show full email; that API is **not** registered as an AI tool
@@ -138,7 +138,7 @@ Or delete `backend/data/` H2 files and restart.
 
 1. Snapshot + source mix  
 2. Lookup a subscriber  
-3. Instagram cold segment + CSV export  
+3. Instagram cold analytics query + CSV export  
 4. Live curl webhook (anon → login) + ticker / lookup  
 5. Assistant + show `CdpTools` / `PiiService`  
 6. Where AI helped / was wrong; security concern (e.g. webhook rate limits); what’s next  

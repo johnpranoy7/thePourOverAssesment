@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api, SegmentMeta, SegmentResult } from "../api";
+import { api, AnalyticsMeta, AnalyticsResult } from "../api";
 import { formatDate } from "../formatDate";
 
-type Member = SegmentResult["members"][number];
+type Member = AnalyticsResult["members"][number];
 type SortKey = "subscriberRef" | "maskedEmail" | "acquisitionSource" | "lastOpenDate" | "engagementScore";
 
 const SORT_LABELS: Record<SortKey, string> = {
@@ -56,17 +56,18 @@ function matchesColumn(value: string | number | null | undefined, filter: string
     .includes(f);
 }
 
-export default function SegmentsPage() {
-  const [list, setList] = useState<SegmentMeta[]>([]);
+export default function AnalyticsPage() {
+  const [list, setList] = useState<AnalyticsMeta[]>([]);
   const [sources, setSources] = useState<string[]>([]);
-  const [active, setActive] = useState<SegmentResult | null>(null);
-  /** Selected tab id — drives the panel below. */
-  const [focus, setFocus] = useState("instagram-cold-30d");
+  const [active, setActive] = useState<AnalyticsResult | null>(null);
+  type TabId = "open-activity" | "most-engaged" | "new-subscribers";
+
+  const [focus, setFocus] = useState<TabId>("open-activity");
   const [source, setSource] = useState("instagram");
   const [activity, setActivity] = useState<"active" | "inactive">("inactive");
   const [days, setDays] = useState("30");
   const [signupDays, setSignupDays] = useState("30");
-  const [lastCustom, setLastCustom] = useState<{
+  const [lastOpenActivity, setLastOpenActivity] = useState<{
     source: string;
     activity: "active" | "inactive";
     days: string;
@@ -82,9 +83,9 @@ export default function SegmentsPage() {
   const loading = loadingId !== null;
 
   useEffect(() => {
-    Promise.all([api.segments(), api.snapshot()])
-      .then(([seg, snap]) => {
-        setList(seg.segments || []);
+    Promise.all([api.analyticsTabs(), api.snapshot()])
+      .then(([tabs, snap]) => {
+        setList(tabs.tabs || []);
         const fromData = Object.keys(snap.snapshot?.sourceMix || {})
           .filter((s) => s && s !== "unknown")
           .sort((a, b) => a.localeCompare(b));
@@ -99,12 +100,12 @@ export default function SegmentsPage() {
     setSortDir(-1);
   }
 
-  function applyFocusDefaults(id: string) {
-    if (id === "instagram-cold-30d") {
+  function applyFocusDefaults(id: TabId) {
+    if (id === "open-activity") {
       setSource("instagram");
       setActivity("inactive");
       setDays("30");
-    } else if (id === "new-subscriber-first-pages") {
+    } else if (id === "new-subscribers") {
       setSignupDays("30");
     }
   }
@@ -118,33 +119,15 @@ export default function SegmentsPage() {
     return trimmed;
   }
 
-  async function runPreset(id: string, signupWindow?: string) {
-    setError("");
-    setLoadingId(id);
-    try {
-      const windowDays =
-        id === "new-subscriber-first-pages"
-          ? (signupWindow ?? normalizeWindow(signupDays, "30", setSignupDays))
-          : undefined;
-      const result = await api.runSegment(id, windowDays);
-      setActive(result);
-      setLastCustom(null);
-      setLastSignupDays(id === "new-subscriber-first-pages" ? (windowDays ?? null) : null);
-      resetResultView();
-    } catch {
-      setError("Segment failed");
-    } finally {
-      setLoadingId(null);
-    }
-  }
-
-  async function selectTab(id: string) {
+  async function selectTab(id: TabId) {
     setFocus(id);
     applyFocusDefaults(id);
-    if (id === "new-subscriber-first-pages") {
-      await runPreset(id, "30");
+    if (id === "open-activity") {
+      await runOpenActivity("instagram", "inactive", "30");
+    } else if (id === "most-engaged") {
+      await runMostEngaged();
     } else {
-      await runPreset(id);
+      await runNewSubscribers("30");
     }
   }
 
@@ -165,46 +148,85 @@ export default function SegmentsPage() {
     setDays(next === "active" ? "2" : "10");
   }
 
-  async function runOpenActivity() {
-    const windowDays = normalizeWindow(days, activity === "active" ? "2" : "10", setDays);
+  async function runOpenActivity(
+    nextSource = source,
+    nextActivity = activity,
+    nextDays = days,
+  ) {
+    const windowDays = normalizeWindow(
+      nextDays,
+      nextActivity === "active" ? "2" : "30",
+      setDays,
+    );
 
     setError("");
-    setLoadingId("instagram-cold-30d");
+    setLoadingId("open-activity");
     try {
-      setActive(await api.customSegment(source, activity, windowDays));
-      setLastCustom({ source, activity, days: windowDays });
+      setActive(await api.openActivity(nextSource, nextActivity, windowDays));
+      setLastOpenActivity({ source: nextSource, activity: nextActivity, days: windowDays });
       setLastSignupDays(null);
-      setFocus("instagram-cold-30d");
+      setFocus("open-activity");
       resetResultView();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Custom segment failed");
+      setError(err instanceof Error ? err.message : "Open activity query failed");
     } finally {
       setLoadingId(null);
     }
   }
 
-  async function runNewSubscribers() {
-    const windowDays = normalizeWindow(signupDays, "30", setSignupDays);
-    await runPreset("new-subscriber-first-pages", windowDays);
+  async function runMostEngaged() {
+    setError("");
+    setLoadingId("most-engaged");
+    try {
+      setActive(await api.mostEngaged());
+      setLastOpenActivity(null);
+      setLastSignupDays(null);
+      resetResultView();
+    } catch {
+      setError("Most engaged query failed");
+    } finally {
+      setLoadingId(null);
+    }
   }
 
-  const usesOpenActivityForm = focus === "instagram-cold-30d";
-  const usesNewSubscribersForm = focus === "new-subscriber-first-pages";
+  async function runNewSubscribers(explicitDays?: string) {
+    const windowDays = normalizeWindow(explicitDays ?? signupDays, "30", setSignupDays);
+    setError("");
+    setLoadingId("new-subscribers");
+    try {
+      setActive(await api.newSubscribers(windowDays));
+      setLastOpenActivity(null);
+      setLastSignupDays(windowDays);
+      setFocus("new-subscribers");
+      resetResultView();
+    } catch {
+      setError("New subscribers query failed");
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
+  const usesOpenActivityForm = focus === "open-activity";
+  const usesNewSubscribersForm = focus === "new-subscribers";
 
   function exportHref(): string | null {
     if (!active) return null;
-    if (active.id === "custom") {
-      if (!lastCustom) return null;
+    if (active.id === "open-activity") {
+      const q = lastOpenActivity ?? { source, activity, days };
       const params = new URLSearchParams();
-      if (lastCustom.source) params.set("source", lastCustom.source);
-      params.set("activity", lastCustom.activity);
-      params.set("days", lastCustom.days);
-      return `/api/segments/custom/export?${params}`;
+      if (q.source) params.set("source", q.source);
+      params.set("activity", q.activity);
+      params.set("days", q.days);
+      return `/api/analytics/open-activity/export?${params}`;
     }
-    if (active.id === "new-subscriber-first-pages" && lastSignupDays) {
-      return `/api/segments/${encodeURIComponent(active.id)}/export?days=${encodeURIComponent(lastSignupDays)}`;
+    if (active.id === "new-subscribers") {
+      const d = lastSignupDays ?? signupDays;
+      return `/api/analytics/new-subscribers/export?days=${encodeURIComponent(d)}`;
     }
-    return `/api/segments/${encodeURIComponent(active.id)}/export`;
+    if (active.id === "most-engaged") {
+      return "/api/analytics/most-engaged/export";
+    }
+    return null;
   }
 
   async function onOpenActivitySubmit(e: FormEvent) {
@@ -257,19 +279,18 @@ export default function SegmentsPage() {
 
   const hasActiveFilters = Object.values(columnFilters).some((v) => v.trim());
 
-  const tabs: Array<{ id: string; fallback: string }> = [
-    { id: "instagram-cold-30d", fallback: "Source & open activity" },
+  const tabs: Array<{ id: TabId; fallback: string }> = [
+    { id: "open-activity", fallback: "Source & open activity" },
     { id: "most-engaged", fallback: "Most engaged readers" },
-    { id: "new-subscriber-first-pages", fallback: "New subscribers" },
+    { id: "new-subscribers", fallback: "New subscribers" },
   ];
 
   return (
     <>
       <section className="panel analytics-tabs-panel">
         <h2 style={{ marginTop: 0 }}>Analytics</h2>
-        <p className="sub">Choose a tab — the settings row below follows that selection.</p>
 
-        <div className="seg-tabs" role="tablist" aria-label="Growth segments">
+        <div className="seg-tabs" role="tablist" aria-label="Analytics">
           {tabs.map((tab) => {
             const selected = focus === tab.id;
             const meta = list.find((s) => s.id === tab.id);
@@ -280,7 +301,7 @@ export default function SegmentsPage() {
                 role="tab"
                 id={`tab-${tab.id}`}
                 aria-selected={selected}
-                aria-controls="seg-tab-panel"
+                aria-controls="analytics-tab-panel"
                 className={`seg-tab${selected ? " is-selected" : ""}${
                   loadingId === tab.id ? " is-loading" : ""
                 }`}
@@ -297,132 +318,113 @@ export default function SegmentsPage() {
         <div
           className="seg-tab-panel"
           role="tabpanel"
-          id="seg-tab-panel"
+          id="analytics-tab-panel"
           aria-labelledby={`tab-${focus}`}
         >
-          {focus === "most-engaged" ? (
-            <p className="sub filter-hint" style={{ marginBottom: 0 }}>
-              Ranks newsletter profiles by engagement score (email open, story reads, app opens, site
-              visits). Results load when you select this tab.
-            </p>
-          ) : null}
-
           {usesNewSubscribersForm ? (
-            <>
-              <p className="sub filter-hint">
-                People who signed up within this many days (as of 2026-09-28) and have at least one linked
-                website visit. Default is 30 — change and run to refine.
-              </p>
-              <form className="row" onSubmit={onNewSubscribersSubmit}>
-                <div>
-                  <label htmlFor="signup-days">Signed up within (days)</label>
-                  <input
-                    id="signup-days"
-                    inputMode="numeric"
-                    pattern="\d*"
-                    min={0}
-                    step={1}
-                    placeholder="30"
-                    value={signupDays}
-                    disabled={loading}
-                    onChange={(e) => onSignupDaysChange(e.target.value)}
-                    onBlur={() => {
-                      if (signupDays.trim() === "") setSignupDays("30");
-                    }}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const text = e.clipboardData.getData("text").trim();
-                      setSignupDays(/^\d+$/.test(text) ? text : "30");
-                    }}
-                  />
-                </div>
-                <button type="submit" disabled={loading}>
-                  {loading ? (
-                    <span className="inline-busy">
-                      <span className="spinner spinner-sm" aria-hidden="true" />
-                      Running…
-                    </span>
-                  ) : (
-                    "Run filter"
-                  )}
-                </button>
-              </form>
-            </>
+            <form className="row" onSubmit={onNewSubscribersSubmit}>
+              <div>
+                <label htmlFor="signup-days">Signed up within (days)</label>
+                <input
+                  id="signup-days"
+                  inputMode="numeric"
+                  pattern="\d*"
+                  min={0}
+                  step={1}
+                  placeholder="30"
+                  value={signupDays}
+                  disabled={loading}
+                  onChange={(e) => onSignupDaysChange(e.target.value)}
+                  onBlur={() => {
+                    if (signupDays.trim() === "") setSignupDays("30");
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const text = e.clipboardData.getData("text").trim();
+                    setSignupDays(/^\d+$/.test(text) ? text : "30");
+                  }}
+                />
+              </div>
+              <button type="submit" disabled={loading}>
+                {loading ? (
+                  <span className="inline-busy">
+                    <span className="spinner spinner-sm" aria-hidden="true" />
+                    Running…
+                  </span>
+                ) : (
+                  "Run filter"
+                )}
+              </button>
+            </form>
           ) : null}
 
           {usesOpenActivityForm ? (
-            <>
-              <p className="sub filter-hint">
-                Filter by acquisition source and whether readers are recently active or inactive (as of
-                2026-09-28). Defaults start at Instagram · inactive ≥ 30 days — change any field and run.
-              </p>
-              <form className="row" onSubmit={onOpenActivitySubmit}>
-                <div>
-                  <label htmlFor="source">Acquisition source</label>
-                  <select
-                    id="source"
-                    value={source}
-                    disabled={loading}
-                    onChange={(e) => setSource(e.target.value)}
-                  >
-                    <option value="">Any source</option>
-                    {sources.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="activity">Look for</label>
-                  <select
-                    id="activity"
-                    value={activity}
-                    disabled={loading}
-                    onChange={(e) => onActivityChange(e.target.value as "active" | "inactive")}
-                  >
-                    <option value="inactive">Inactive (cold)</option>
-                    <option value="active">Recently active</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="days">
-                    {activity === "active" ? "Active within (days)" : "Inactive for at least (days)"}
-                  </label>
-                  <input
-                    id="days"
-                    inputMode="numeric"
-                    pattern="\d*"
-                    min={0}
-                    step={1}
-                    placeholder={activity === "active" ? "2" : "10"}
-                    value={days}
-                    disabled={loading}
-                    onChange={(e) => onDaysChange(e.target.value)}
-                    onBlur={() => {
-                      if (days.trim() === "") {
-                        setDays(activity === "active" ? "2" : "10");
-                      }
-                    }}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const text = e.clipboardData.getData("text").trim();
-                      setDays(/^\d+$/.test(text) ? text : activity === "active" ? "2" : "10");
-                    }}
-                  />
-                </div>
-                <button type="submit" disabled={loading}>
-                  {loading ? (
-                    <span className="inline-busy">
-                      <span className="spinner spinner-sm" aria-hidden="true" />
-                      Running…
-                    </span>
-                  ) : (
-                    "Run filter"
-                  )}
-                </button>
-              </form>
-            </>
+            <form className="row" onSubmit={onOpenActivitySubmit}>
+              <div>
+                <label htmlFor="source">Acquisition source</label>
+                <select
+                  id="source"
+                  value={source}
+                  disabled={loading}
+                  onChange={(e) => setSource(e.target.value)}
+                >
+                  <option value="">Any source</option>
+                  {sources.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="activity">Look for</label>
+                <select
+                  id="activity"
+                  value={activity}
+                  disabled={loading}
+                  onChange={(e) => onActivityChange(e.target.value as "active" | "inactive")}
+                >
+                  <option value="inactive">Inactive (cold)</option>
+                  <option value="active">Recently active</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="days">
+                  {activity === "active" ? "Active within (days)" : "Inactive for at least (days)"}
+                </label>
+                <input
+                  id="days"
+                  inputMode="numeric"
+                  pattern="\d*"
+                  min={0}
+                  step={1}
+                  placeholder={activity === "active" ? "2" : "10"}
+                  value={days}
+                  disabled={loading}
+                  onChange={(e) => onDaysChange(e.target.value)}
+                  onBlur={() => {
+                    if (days.trim() === "") {
+                      setDays(activity === "active" ? "2" : "10");
+                    }
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const text = e.clipboardData.getData("text").trim();
+                    setDays(/^\d+$/.test(text) ? text : activity === "active" ? "2" : "10");
+                  }}
+                />
+              </div>
+              <button type="submit" disabled={loading}>
+                {loading ? (
+                  <span className="inline-busy">
+                    <span className="spinner spinner-sm" aria-hidden="true" />
+                    Running…
+                  </span>
+                ) : (
+                  "Run filter"
+                )}
+              </button>
+            </form>
           ) : null}
         </div>
       </section>
@@ -433,7 +435,7 @@ export default function SegmentsPage() {
         <section className="panel loading-panel" aria-live="polite" aria-busy="true">
           <span className="spinner" aria-hidden="true" />
           <p className="sub" style={{ margin: 0 }}>
-            Building segment results…
+            Loading…
           </p>
         </section>
       ) : null}
