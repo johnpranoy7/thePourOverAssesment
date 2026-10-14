@@ -79,6 +79,8 @@ public class ChatService {
             if (answer == null || answer.isBlank()) {
                 answer = "No response.";
             }
+            // Never persist or return emails the model invents/echoes.
+            answer = piiService.redactEmailsInText(answer);
 
             chatMemory.add(memoryId, new UserMessage(safeMessage));
             chatMemory.add(memoryId, new AssistantMessage(answer));

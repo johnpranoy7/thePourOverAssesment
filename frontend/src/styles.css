@@ -752,8 +752,144 @@ button.secondary.is-loading {
 }
 
 .login-card {
-  width: min(420px, 100%);
+  width: min(400px, 100%);
   animation: riseIn 0.5s ease both;
+}
+
+.login-card__header {
+  margin-bottom: 1.35rem;
+}
+
+.login-card__header .brand {
+  margin: 0 0 0.35rem;
+}
+
+.login-card__header .sub {
+  margin: 0;
+}
+
+.login-card__error {
+  margin: 0 0 1rem;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.login-credentials {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.login-field label {
+  margin-bottom: 0;
+}
+
+.password-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input input {
+  padding-right: 2.75rem;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.password-toggle:hover {
+  color: var(--espresso);
+  background: color-mix(in srgb, var(--foam) 70%, transparent);
+  transform: translateY(-50%);
+}
+
+.login-submit {
+  width: 100%;
+  margin-top: 0;
+}
+
+.login-alt {
+  margin-top: 0.25rem;
+}
+
+.oauth-stack {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1.25rem;
+}
+
+.github-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.7rem 1.05rem;
+  border-radius: 10px;
+  text-decoration: none;
+  font-weight: 700;
+  background: #24292f;
+  color: #f6f8fa;
+  border: 1px solid #24292f;
+  transition:
+    background-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.25s ease;
+}
+
+.github-btn:hover {
+  background: #32383f;
+  border-color: #32383f;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(28, 20, 16, 0.18);
+}
+
+.github-btn__icon {
+  flex-shrink: 0;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.1rem 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-transform: lowercase;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
 }
 
 @keyframes riseIn {

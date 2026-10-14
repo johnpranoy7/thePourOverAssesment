@@ -9,8 +9,12 @@ spring:
     openai:
       api-key: test-key
 cdp:
-  ui-password: test
   webhook-secret: secret
   pii-hash-salt: salt
   today: "2026-09-28"
   seed-on-startup: false
+  github-allowed-logins: ""
+  users:
+    - username: growth
+      password: test
+

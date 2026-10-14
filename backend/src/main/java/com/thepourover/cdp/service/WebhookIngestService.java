@@ -29,6 +29,7 @@ public class WebhookIngestService {
     private final AppUserRepository appUserRepository;
     private final SubscriberRepository subscriberRepository;
     private final DeviceLinkRepository deviceLinkRepository;
+    private final EmailNormalizer emailNormalizer;
     private final ObjectMapper objectMapper;
 
     public WebhookIngestService(
@@ -36,11 +37,13 @@ public class WebhookIngestService {
             AppUserRepository appUserRepository,
             SubscriberRepository subscriberRepository,
             DeviceLinkRepository deviceLinkRepository,
+            EmailNormalizer emailNormalizer,
             ObjectMapper objectMapper) {
         this.appEventRepository = appEventRepository;
         this.appUserRepository = appUserRepository;
         this.subscriberRepository = subscriberRepository;
         this.deviceLinkRepository = deviceLinkRepository;
+        this.emailNormalizer = emailNormalizer;
         this.objectMapper = objectMapper;
     }
 
@@ -102,7 +105,10 @@ public class WebhookIngestService {
     }
 
     private Subscriber createStubForUser(String userId) {
-        String stubEmail = "stub+" + userId.toLowerCase() + "@cdp.local";
+        String stubEmail = emailNormalizer.normalize("stub+" + userId + "@cdp.local");
+        if (stubEmail == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid user_id");
+        }
         Subscriber subscriber = subscriberRepository.findByEmail(stubEmail).orElseGet(() -> {
             Subscriber s = new Subscriber();
             s.setEmail(stubEmail);

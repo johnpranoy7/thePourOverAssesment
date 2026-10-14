@@ -23,7 +23,7 @@ public final class SubscriberMergeRules {
         if (sa != null && sb == null) {
             return a;
         }
-        if (sb != null) {
+        if (sa == null && sb != null) {
             return b;
         }
         int open = Boolean.compare(a.getLastOpenDate() != null, b.getLastOpenDate() != null);
@@ -33,7 +33,11 @@ public final class SubscriberMergeRules {
         int src = Boolean.compare(
                 a.getAcquisitionSource() != null && !a.getAcquisitionSource().isBlank(),
                 b.getAcquisitionSource() != null && !b.getAcquisitionSource().isBlank());
-        return src >= 0 ? a : b;
+        if (src != 0) {
+            return src > 0 ? a : b;
+        }
+        // Full tie: keep the first argument (stable for seed iteration).
+        return a;
     }
 
     private static int statusRank(String status) {

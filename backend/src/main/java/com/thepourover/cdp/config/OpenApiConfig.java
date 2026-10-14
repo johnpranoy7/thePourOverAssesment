@@ -26,10 +26,11 @@ public class OpenApiConfig {
                                 Backend for the Growth mini CDP.
 
                                 **Add live app events:** use `POST /webhooks/app` (Authorize with \
-                                WebhookBearer = your `WEBHOOK_SECRET`, default `dev-webhook-secret`).
+                                WebhookBearer = your `WEBHOOK_SECRET` env value).
 
-                                **UI session APIs** (`/api/**`): log in via `POST /api/auth/login` first \
-                                (cookie session), then call lookup / analytics / snapshot / chat / reseed.
+                                **UI session APIs** (`/api/**`): log in via `POST /api/auth/login`, \
+                                then call lookup / analytics / snapshot / chat / reseed. \
+                                Swagger UI itself requires an authenticated session.
                                 """)
                         .version("0.0.1")
                         .contact(new Contact().name("The Pour Over CDP")))
@@ -40,11 +41,11 @@ public class OpenApiConfig {
                                 .type(SecurityScheme.Type.HTTP)
                                 .scheme("bearer")
                                 .bearerFormat("WEBHOOK_SECRET")
-                                .description("Value of WEBHOOK_SECRET only (Swagger adds the Bearer prefix). Default: dev-webhook-secret"))
+                                .description("Value of WEBHOOK_SECRET only (Swagger adds the Bearer prefix)."))
                         .addSecuritySchemes(UI_SESSION, new SecurityScheme()
                                 .name("JSESSIONID")
                                 .type(SecurityScheme.Type.APIKEY)
                                 .in(SecurityScheme.In.COOKIE)
-                                .description("Set automatically after POST /api/auth/login with UI password")));
+                                .description("Set automatically after username/password or GitHub login")));
     }
 }

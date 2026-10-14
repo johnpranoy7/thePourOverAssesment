@@ -16,9 +16,15 @@ public interface WebEventRepository extends JpaRepository<WebEvent, Long> {
 
     long countBySubscriberIsNotNull();
 
-    @Modifying
-    @Query("update WebEvent w set w.subscriber = :subscriber where w.visitorId = :visitorId")
-    int linkVisitorToSubscriber(@Param("visitorId") String visitorId, @Param("subscriber") Subscriber subscriber);
+    /** Attach anonymous (unlinked) events for a visitor; does not reassign already-linked rows. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update WebEvent w
+            set w.subscriber = :subscriber
+            where w.visitorId = :visitorId and w.subscriber is null
+            """)
+    int linkAnonymousVisitorEvents(
+            @Param("visitorId") String visitorId, @Param("subscriber") Subscriber subscriber);
 
     /** Bulk engagement: [subscriberId, visitCount] for linked web events. */
     @Query("""

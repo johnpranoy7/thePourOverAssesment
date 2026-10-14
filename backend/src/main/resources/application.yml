@@ -1,5 +1,11 @@
 server:
   port: 8080
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        same-site: lax
+        http-only: true
 
 spring:
   application:
@@ -8,8 +14,8 @@ spring:
     # Override with SPRING_DATASOURCE_URL in Docker (no AUTO_SERVER on a single container).
     url: jdbc:h2:file:./data/cdp;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE;DATABASE_TO_UPPER=TRUE
     driver-class-name: org.h2.Driver
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
@@ -22,26 +28,42 @@ spring:
           time_zone: UTC
   h2:
     console:
-      enabled: true
+      # Off by default. Set CDP_H2_CONSOLE=true only for local debugging (still requires login).
+      enabled: ${CDP_H2_CONSOLE:false}
       path: /h2-console
       settings:
         web-allow-others: false
   ai:
     openai:
-      # Populated from OS env or backend/.env via spring-dotenv
       # Empty is OK at boot; Assistant returns 503 until a real key is set.
       api-key: ${SPRING_AI_OPENAI_API_KEY:}
       chat:
         options:
           model: ${OPENAI_MODEL:gpt-4o-mini}
           temperature: 0.2
+  # Optional GitHub OAuth — leave blank to hide the GitHub button.
+  # Also requires GITHUB_ALLOWED_LOGINS (comma-separated logins/emails).
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID:}
+            client-secret: ${GITHUB_CLIENT_SECRET:}
+            client-name: GitHub
 
 cdp:
-  ui-password: ${UI_PASSWORD:pour-over}
-  webhook-secret: ${WEBHOOK_SECRET:dev-webhook-secret}
-  pii-hash-salt: ${PII_HASH_SALT:dev-pii-salt}
+  # Required — set in .env / environment (no weak built-in defaults).
+  webhook-secret: ${WEBHOOK_SECRET}
+  pii-hash-salt: ${PII_HASH_SALT}
   today: "2026-09-28"
   seed-on-startup: true
+  github-allowed-logins: ${GITHUB_ALLOWED_LOGINS:}
+  users:
+    - username: ${CDP_USERNAME:growth}
+      password: ${CDP_PASSWORD:pour-over}
+    - username: ${RECRUITER_USERNAME:recruiter}
+      password: ${RECRUITER_PASSWORD:demo}
 
 springdoc:
   api-docs:

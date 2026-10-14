@@ -9,10 +9,13 @@ public final class Dtos {
     private Dtos() {
     }
 
-    public record LoginRequest(String password) {
+    public record LoginRequest(String username, String password) {
     }
 
-    public record AuthResponse(boolean authenticated) {
+    public record AuthResponse(boolean authenticated, String username) {
+    }
+
+    public record AuthConfigResponse(boolean githubEnabled, String githubAuthorizationUrl) {
     }
 
     public record WebEventView(String visitorId, String page, Instant timestamp, String utmSource) {

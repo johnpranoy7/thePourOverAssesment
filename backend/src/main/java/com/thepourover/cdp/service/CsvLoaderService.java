@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -183,12 +184,7 @@ public class CsvLoaderService {
                 }
                 webEventRepository.save(event);
                 if (subscriber != null) {
-                    for (WebEvent prior : webEventRepository.findByVisitorId(visitorId)) {
-                        if (prior.getSubscriber() == null) {
-                            prior.setSubscriber(subscriber);
-                            webEventRepository.save(prior);
-                        }
-                    }
+                    webEventRepository.linkAnonymousVisitorEvents(visitorId, subscriber);
                 }
                 count++;
             }

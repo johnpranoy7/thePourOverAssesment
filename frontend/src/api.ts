@@ -1,11 +1,28 @@
+function readCookie(name: string): string | null {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function csrfHeaders(method: string): Record<string, string> {
+  const upper = method.toUpperCase();
+  if (upper === "GET" || upper === "HEAD" || upper === "OPTIONS" || upper === "TRACE") {
+    return {};
+  }
+  const token = readCookie("XSRF-TOKEN");
+  return token ? { "X-XSRF-TOKEN": token } : {};
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = init?.method ?? "GET";
   const res = await fetch(path, {
     credentials: "include",
+    ...init,
     headers: {
       "Content-Type": "application/json",
+      ...csrfHeaders(method),
       ...(init?.headers || {}),
     },
-    ...init,
   });
   if (!res.ok) {
     let message = res.statusText;
@@ -25,12 +42,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  login: (password: string) =>
+  authConfig: () => request<AuthConfig>("/api/auth/config"),
+  login: (username: string, password: string) =>
     request<{ ok: boolean }>("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     }),
-  me: () => request<{ authenticated: boolean }>("/api/auth/me"),
+  me: () => request<AuthMe>("/api/auth/me"),
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
   snapshot: () => request<SnapshotResponse>("/api/snapshot"),
   profile: (email: string) =>
@@ -55,6 +73,16 @@ export const api = {
     request<{ ok: boolean }>(`/api/chat?conversationId=${encodeURIComponent(conversationId)}`, {
       method: "DELETE",
     }),
+};
+
+export type AuthConfig = {
+  githubEnabled: boolean;
+  githubAuthorizationUrl: string | null;
+};
+
+export type AuthMe = {
+  authenticated: boolean;
+  username: string | null;
 };
 
 export type SnapshotResponse = {
