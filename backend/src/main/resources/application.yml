@@ -5,6 +5,7 @@ spring:
   application:
     name: the-pour-over-cdp
   datasource:
+    # Override with SPRING_DATASOURCE_URL in Docker (no AUTO_SERVER on a single container).
     url: jdbc:h2:file:./data/cdp;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE;DATABASE_TO_UPPER=TRUE
     driver-class-name: org.h2.Driver
     username: ${DB_USERNAME}

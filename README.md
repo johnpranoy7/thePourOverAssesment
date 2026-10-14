@@ -127,10 +127,35 @@ curl -X POST http://localhost:8080/api/admin/reseed -b cookies.txt
 
 Or delete `backend/data/` H2 files and restart.
 
+## Docker (recommended for hosting)
+
+Multi-stage image: builds the React SPA, packages it into the Spring Boot jar, runs one container on port 8080. H2 data lives in a named volume.
+
+```bash
+cp .env.example .env
+# edit .env — set SPRING_AI_OPENAI_API_KEY and stronger secrets for a shared host
+
+docker compose up --build -d
+```
+
+- **UI:** `http://localhost:8080` (or `http://YOUR_SERVER:8080`)
+- **Webhook:** `http://YOUR_SERVER:8080/webhooks/app`
+- **Swagger:** `http://YOUR_SERVER:8080/swagger-ui.html`
+
+Useful commands:
+
+```bash
+docker compose logs -f cdp
+docker compose down          # keeps the cdp-data volume
+docker compose down -v       # wipes H2 (full re-seed on next start)
+```
+
+Put a reverse proxy (Caddy/nginx) in front for HTTPS when you expose the host beyond LAN. OIDC can replace the shared `UI_PASSWORD` later without changing the Docker layout.
+
 ## Deploy (Railway / Render)
 
-1. Build frontend into `backend/src/main/resources/static` (see above)
-2. Deploy the Spring Boot jar
+1. Build frontend into `backend/src/main/resources/static` (see above), or build/push the Docker image
+2. Deploy the Spring Boot jar (or container)
 3. Set env: `UI_PASSWORD`, `WEBHOOK_SECRET`, `PII_HASH_SALT`, `SPRING_AI_OPENAI_API_KEY`
 4. Persist disk for `./data` (H2 file) so webhook events survive restarts
 
@@ -146,6 +171,9 @@ Or delete `backend/data/` H2 files and restart.
 ## Project layout
 
 ```text
-backend/     Spring Boot API, H2, webhook, Spring AI
-frontend/    Vite React SPA
+backend/            Spring Boot API, H2, webhook, Spring AI
+frontend/           Vite React SPA
+Dockerfile          Multi-stage image (UI + jar)
+docker-compose.yml  Local / in-house host
+.env.example        Secrets template for Compose
 ```

@@ -24,6 +24,7 @@ Thumbs.db
 # Env / secrets (never commit API keys)
 .env
 .env.local
+.env.*.local
 backend/.env
 backend/src/main/resources/.env
 **/application-local.yml
