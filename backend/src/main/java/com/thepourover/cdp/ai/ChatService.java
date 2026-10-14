@@ -32,7 +32,13 @@ public class ChatService {
             - Today for all time math is 2026-09-28.
             - Answer in plain English for non-technical teammates. Use tools for numbers, tables, and segments.
             - Never ask for or invent emails, names, or other PII. Tool results use subscriber_ref hashes only.
-            - Prefer short answers with a compact markdown table when listing members.
+            - Day windows must be an explicit number from the user (e.g. 2, 7, 30). If they say something
+              vague like "couple of days", "recently", or "a while", do not guess—ask one short clarifying
+              question for the number of days, then call tools with that number.
+            - Lead with the number when they ask how many / count / total. A short sample table of
+              members afterward is fine and helpful; keep it compact (a handful of rows), not the full dump.
+            - If they explicitly want only the count, skip the sample table.
+            - When they ask for a list or who/which readers, lead with the table.
             - Use prior turns in this conversation when the user refers to earlier answers.
             """;
 

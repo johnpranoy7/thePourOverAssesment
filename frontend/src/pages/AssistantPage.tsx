@@ -186,6 +186,8 @@ export default function AssistantPage() {
                 placeholder={placeholder}
                 aria-label="Message"
                 disabled={loading}
+                enterKeyHint="send"
+                autoComplete="off"
               />
             </div>
             <button type="submit" disabled={loading}>

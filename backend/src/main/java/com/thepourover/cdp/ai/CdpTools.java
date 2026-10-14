@@ -43,13 +43,15 @@ public class CdpTools {
         return result;
     }
 
-    @Tool(description = "Count/filter subscribers by acquisition source and inactivity days relative to 2026-09-28. Returns hashed refs only.")
+    @Tool(description = "Filter subscribers by acquisition source and open activity as of 2026-09-28. activity=inactive (cold for at least N days) or active (opened within last N days). Returns total count plus a small member sample for illustration.")
     public RedactedSegmentResult countCustomSegment(
             @ToolParam(description = "Acquisition source e.g. instagram", required = false) String source,
-            @ToolParam(description = "Days without open", required = false) Integer inactiveDays,
-            @ToolParam(description = "Max members", required = false) Integer limit) {
+            @ToolParam(description = "inactive (default) or active", required = false) String activity,
+            @ToolParam(description = "Exact day window as an integer from the user. Do not invent a value for vague phrases. For inactive = min days without open; for active = opened within last N days.", required = false) Integer days,
+            @ToolParam(description = "Max sample members to return (not the total count). Default a small sample.", required = false) Integer limit) {
+        int sampleLimit = limit == null ? 10 : Math.max(0, limit);
         RedactedSegmentResult result = segmentService.customSegmentRedacted(
-                source, inactiveDays, limit == null ? 25 : limit);
+                source, activity, days, sampleLimit);
         piiService.assertNoEmails(result, "countCustomSegment");
         return result;
     }

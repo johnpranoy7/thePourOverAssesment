@@ -25,4 +25,13 @@ public interface AppEventRepository extends JpaRepository<AppEvent, Long> {
     int attachDeviceEvents(@Param("deviceId") String deviceId, @Param("subscriber") Subscriber subscriber);
 
     long countByEventType(String eventType);
+
+    /** Bulk engagement: [subscriberId, eventType, count] for linked app events. */
+    @Query("""
+            select e.subscriber.id, e.eventType, count(e)
+            from AppEvent e
+            where e.subscriber is not null
+            group by e.subscriber.id, e.eventType
+            """)
+    List<Object[]> countGroupedBySubscriberAndEventType();
 }

@@ -19,4 +19,20 @@ public interface WebEventRepository extends JpaRepository<WebEvent, Long> {
     @Modifying
     @Query("update WebEvent w set w.subscriber = :subscriber where w.visitorId = :visitorId")
     int linkVisitorToSubscriber(@Param("visitorId") String visitorId, @Param("subscriber") Subscriber subscriber);
+
+    /** Bulk engagement: [subscriberId, visitCount] for linked web events. */
+    @Query("""
+            select w.subscriber.id, count(w)
+            from WebEvent w
+            where w.subscriber is not null
+            group by w.subscriber.id
+            """)
+    List<Object[]> countGroupedBySubscriber();
+
+    @Query("""
+            select distinct w.subscriber.id
+            from WebEvent w
+            where w.subscriber is not null
+            """)
+    List<Long> findDistinctSubscriberIdsWithVisits();
 }

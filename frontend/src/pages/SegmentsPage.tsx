@@ -1,113 +1,561 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, SegmentMeta, SegmentResult } from "../api";
 import { formatDate } from "../formatDate";
 
+type Member = SegmentResult["members"][number];
+type SortKey = "subscriberRef" | "maskedEmail" | "acquisitionSource" | "lastOpenDate" | "engagementScore";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  subscriberRef: "Ref",
+  maskedEmail: "Masked email",
+  acquisitionSource: "Source",
+  lastOpenDate: "Last open",
+  engagementScore: "Score",
+};
+
+type ColumnFilters = {
+  subscriberRef: string;
+  maskedEmail: string;
+  acquisitionSource: string;
+  lastOpenDate: string;
+  engagementScore: string;
+};
+
+const EMPTY_FILTERS: ColumnFilters = {
+  subscriberRef: "",
+  maskedEmail: "",
+  acquisitionSource: "",
+  lastOpenDate: "",
+  engagementScore: "",
+};
+
+function compareMembers(a: Member, b: Member, key: SortKey, dir: 1 | -1): number {
+  const av = a[key];
+  const bv = b[key];
+  if (key === "engagementScore") {
+    return ((av as number) - (bv as number)) * dir;
+  }
+  if (key === "lastOpenDate") {
+    const at = av ? Date.parse(String(av)) : 0;
+    const bt = bv ? Date.parse(String(bv)) : 0;
+    return (at - bt) * dir;
+  }
+  return String(av ?? "").localeCompare(String(bv ?? ""), undefined, { sensitivity: "base" }) * dir;
+}
+
+function matchesColumn(value: string | number | null | undefined, filter: string, isDate = false): boolean {
+  const f = filter.trim().toLowerCase();
+  if (!f) return true;
+  if (isDate) {
+    const formatted = formatDate(value == null ? null : String(value)).toLowerCase();
+    const raw = value == null ? "" : String(value).toLowerCase();
+    return formatted.includes(f) || raw.includes(f);
+  }
+  return String(value ?? "")
+    .toLowerCase()
+    .includes(f);
+}
+
 export default function SegmentsPage() {
   const [list, setList] = useState<SegmentMeta[]>([]);
+  const [sources, setSources] = useState<string[]>([]);
   const [active, setActive] = useState<SegmentResult | null>(null);
+  /** Selected tab id — drives the panel below. */
+  const [focus, setFocus] = useState("instagram-cold-30d");
   const [source, setSource] = useState("instagram");
-  const [inactiveDays, setInactiveDays] = useState("30");
+  const [activity, setActivity] = useState<"active" | "inactive">("inactive");
+  const [days, setDays] = useState("30");
+  const [signupDays, setSignupDays] = useState("30");
+  const [lastCustom, setLastCustom] = useState<{
+    source: string;
+    activity: "active" | "inactive";
+    days: string;
+  } | null>(null);
+  const [lastSignupDays, setLastSignupDays] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>(EMPTY_FILTERS);
+  const [sortKey, setSortKey] = useState<SortKey>("engagementScore");
+  const [sortDir, setSortDir] = useState<1 | -1>(-1);
+
+  const loading = loadingId !== null;
 
   useEffect(() => {
-    api
-      .segments()
-      .then((d) => setList(d.segments || []))
-      .catch(() => setError("Failed to load segments"));
+    Promise.all([api.segments(), api.snapshot()])
+      .then(([seg, snap]) => {
+        setList(seg.segments || []);
+        const fromData = Object.keys(snap.snapshot?.sourceMix || {})
+          .filter((s) => s && s !== "unknown")
+          .sort((a, b) => a.localeCompare(b));
+        setSources(fromData);
+      })
+      .catch(() => setError("Failed to load analytics"));
   }, []);
 
-  async function runPreset(id: string) {
-    setError("");
-    try {
-      setActive(await api.runSegment(id));
-    } catch {
-      setError("Segment failed");
+  function resetResultView() {
+    setColumnFilters(EMPTY_FILTERS);
+    setSortKey("engagementScore");
+    setSortDir(-1);
+  }
+
+  function applyFocusDefaults(id: string) {
+    if (id === "instagram-cold-30d") {
+      setSource("instagram");
+      setActivity("inactive");
+      setDays("30");
+    } else if (id === "new-subscriber-first-pages") {
+      setSignupDays("30");
     }
   }
 
-  async function runCustom() {
+  function normalizeWindow(value: string, fallback: string, setter: (v: string) => void): string {
+    const trimmed = value.trim();
+    if (trimmed === "" || !/^\d+$/.test(trimmed)) {
+      setter(fallback);
+      return fallback;
+    }
+    return trimmed;
+  }
+
+  async function runPreset(id: string, signupWindow?: string) {
     setError("");
+    setLoadingId(id);
     try {
-      setActive(await api.customSegment(source, inactiveDays));
+      const windowDays =
+        id === "new-subscriber-first-pages"
+          ? (signupWindow ?? normalizeWindow(signupDays, "30", setSignupDays))
+          : undefined;
+      const result = await api.runSegment(id, windowDays);
+      setActive(result);
+      setLastCustom(null);
+      setLastSignupDays(id === "new-subscriber-first-pages" ? (windowDays ?? null) : null);
+      resetResultView();
     } catch {
-      setError("Custom segment failed");
+      setError("Segment failed");
+    } finally {
+      setLoadingId(null);
     }
   }
+
+  async function selectTab(id: string) {
+    setFocus(id);
+    applyFocusDefaults(id);
+    if (id === "new-subscriber-first-pages") {
+      await runPreset(id, "30");
+    } else {
+      await runPreset(id);
+    }
+  }
+
+  function onDaysChange(value: string) {
+    if (value === "" || /^\d+$/.test(value)) {
+      setDays(value);
+    }
+  }
+
+  function onSignupDaysChange(value: string) {
+    if (value === "" || /^\d+$/.test(value)) {
+      setSignupDays(value);
+    }
+  }
+
+  function onActivityChange(next: "active" | "inactive") {
+    setActivity(next);
+    setDays(next === "active" ? "2" : "10");
+  }
+
+  async function runOpenActivity() {
+    const windowDays = normalizeWindow(days, activity === "active" ? "2" : "10", setDays);
+
+    setError("");
+    setLoadingId("instagram-cold-30d");
+    try {
+      setActive(await api.customSegment(source, activity, windowDays));
+      setLastCustom({ source, activity, days: windowDays });
+      setLastSignupDays(null);
+      setFocus("instagram-cold-30d");
+      resetResultView();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Custom segment failed");
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
+  async function runNewSubscribers() {
+    const windowDays = normalizeWindow(signupDays, "30", setSignupDays);
+    await runPreset("new-subscriber-first-pages", windowDays);
+  }
+
+  const usesOpenActivityForm = focus === "instagram-cold-30d";
+  const usesNewSubscribersForm = focus === "new-subscriber-first-pages";
+
+  function exportHref(): string | null {
+    if (!active) return null;
+    if (active.id === "custom") {
+      if (!lastCustom) return null;
+      const params = new URLSearchParams();
+      if (lastCustom.source) params.set("source", lastCustom.source);
+      params.set("activity", lastCustom.activity);
+      params.set("days", lastCustom.days);
+      return `/api/segments/custom/export?${params}`;
+    }
+    if (active.id === "new-subscriber-first-pages" && lastSignupDays) {
+      return `/api/segments/${encodeURIComponent(active.id)}/export?days=${encodeURIComponent(lastSignupDays)}`;
+    }
+    return `/api/segments/${encodeURIComponent(active.id)}/export`;
+  }
+
+  async function onOpenActivitySubmit(e: FormEvent) {
+    e.preventDefault();
+    if (loading) return;
+    await runOpenActivity();
+  }
+
+  async function onNewSubscribersSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (loading) return;
+    await runNewSubscribers();
+  }
+
+  const resultSources = useMemo(() => {
+    if (!active) return [];
+    const set = new Set<string>();
+    for (const m of active.members) {
+      if (m.acquisitionSource) set.add(m.acquisitionSource);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [active]);
+
+  const visibleMembers = useMemo(() => {
+    if (!active) return [];
+    return active.members
+      .filter(
+        (m) =>
+          matchesColumn(m.subscriberRef, columnFilters.subscriberRef) &&
+          matchesColumn(m.maskedEmail, columnFilters.maskedEmail) &&
+          matchesColumn(m.acquisitionSource, columnFilters.acquisitionSource) &&
+          matchesColumn(m.lastOpenDate, columnFilters.lastOpenDate, true) &&
+          matchesColumn(m.engagementScore, columnFilters.engagementScore),
+      )
+      .sort((a, b) => compareMembers(a, b, sortKey, sortDir));
+  }, [active, columnFilters, sortKey, sortDir]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 1 ? -1 : 1));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "engagementScore" || key === "lastOpenDate" ? -1 : 1);
+    }
+  }
+
+  function setFilter(key: keyof ColumnFilters, value: string) {
+    setColumnFilters((prev) => ({ ...prev, [key]: value }));
+  }
+
+  const hasActiveFilters = Object.values(columnFilters).some((v) => v.trim());
+
+  const tabs: Array<{ id: string; fallback: string }> = [
+    { id: "instagram-cold-30d", fallback: "Source & open activity" },
+    { id: "most-engaged", fallback: "Most engaged readers" },
+    { id: "new-subscriber-first-pages", fallback: "New subscribers" },
+  ];
 
   return (
     <>
-      <section className="panel">
+      <section className="panel analytics-tabs-panel">
         <h2 style={{ marginTop: 0 }}>Analytics</h2>
-        <p className="sub">Preset Growth segments and custom filters</p>
-        <div className="grid">
-          {list.map((s) => (
-            <button key={s.id} type="button" className="secondary" onClick={() => runPreset(s.id)}>
-              <strong style={{ display: "block" }}>{s.name}</strong>
-              <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{s.count} people</span>
-            </button>
-          ))}
-        </div>
-      </section>
+        <p className="sub">Choose a tab — the settings row below follows that selection.</p>
 
-      <section className="panel">
-        <h3 style={{ marginTop: 0 }}>Custom filter</h3>
-        <div className="row">
-          <div>
-            <label htmlFor="source">Acquisition source</label>
-            <input id="source" value={source} onChange={(e) => setSource(e.target.value)} />
-          </div>
-          <div>
-            <label htmlFor="days">Inactive days</label>
-            <input
-              id="days"
-              value={inactiveDays}
-              onChange={(e) => setInactiveDays(e.target.value)}
-            />
-          </div>
-          <button type="button" onClick={runCustom}>
-            Run filter
-          </button>
+        <div className="seg-tabs" role="tablist" aria-label="Growth segments">
+          {tabs.map((tab) => {
+            const selected = focus === tab.id;
+            const meta = list.find((s) => s.id === tab.id);
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`tab-${tab.id}`}
+                aria-selected={selected}
+                aria-controls="seg-tab-panel"
+                className={`seg-tab${selected ? " is-selected" : ""}${
+                  loadingId === tab.id ? " is-loading" : ""
+                }`}
+                disabled={loading}
+                onClick={() => selectTab(tab.id)}
+              >
+                <span className="seg-tab__label">{meta?.name ?? tab.fallback}</span>
+                {meta ? <span className="seg-tab__count">{meta.count}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+
+        <div
+          className="seg-tab-panel"
+          role="tabpanel"
+          id="seg-tab-panel"
+          aria-labelledby={`tab-${focus}`}
+        >
+          {focus === "most-engaged" ? (
+            <p className="sub filter-hint" style={{ marginBottom: 0 }}>
+              Ranks newsletter profiles by engagement score (email open, story reads, app opens, site
+              visits). Results load when you select this tab.
+            </p>
+          ) : null}
+
+          {usesNewSubscribersForm ? (
+            <>
+              <p className="sub filter-hint">
+                People who signed up within this many days (as of 2026-09-28) and have at least one linked
+                website visit. Default is 30 — change and run to refine.
+              </p>
+              <form className="row" onSubmit={onNewSubscribersSubmit}>
+                <div>
+                  <label htmlFor="signup-days">Signed up within (days)</label>
+                  <input
+                    id="signup-days"
+                    inputMode="numeric"
+                    pattern="\d*"
+                    min={0}
+                    step={1}
+                    placeholder="30"
+                    value={signupDays}
+                    disabled={loading}
+                    onChange={(e) => onSignupDaysChange(e.target.value)}
+                    onBlur={() => {
+                      if (signupDays.trim() === "") setSignupDays("30");
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const text = e.clipboardData.getData("text").trim();
+                      setSignupDays(/^\d+$/.test(text) ? text : "30");
+                    }}
+                  />
+                </div>
+                <button type="submit" disabled={loading}>
+                  {loading ? (
+                    <span className="inline-busy">
+                      <span className="spinner spinner-sm" aria-hidden="true" />
+                      Running…
+                    </span>
+                  ) : (
+                    "Run filter"
+                  )}
+                </button>
+              </form>
+            </>
+          ) : null}
+
+          {usesOpenActivityForm ? (
+            <>
+              <p className="sub filter-hint">
+                Filter by acquisition source and whether readers are recently active or inactive (as of
+                2026-09-28). Defaults start at Instagram · inactive ≥ 30 days — change any field and run.
+              </p>
+              <form className="row" onSubmit={onOpenActivitySubmit}>
+                <div>
+                  <label htmlFor="source">Acquisition source</label>
+                  <select
+                    id="source"
+                    value={source}
+                    disabled={loading}
+                    onChange={(e) => setSource(e.target.value)}
+                  >
+                    <option value="">Any source</option>
+                    {sources.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="activity">Look for</label>
+                  <select
+                    id="activity"
+                    value={activity}
+                    disabled={loading}
+                    onChange={(e) => onActivityChange(e.target.value as "active" | "inactive")}
+                  >
+                    <option value="inactive">Inactive (cold)</option>
+                    <option value="active">Recently active</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="days">
+                    {activity === "active" ? "Active within (days)" : "Inactive for at least (days)"}
+                  </label>
+                  <input
+                    id="days"
+                    inputMode="numeric"
+                    pattern="\d*"
+                    min={0}
+                    step={1}
+                    placeholder={activity === "active" ? "2" : "10"}
+                    value={days}
+                    disabled={loading}
+                    onChange={(e) => onDaysChange(e.target.value)}
+                    onBlur={() => {
+                      if (days.trim() === "") {
+                        setDays(activity === "active" ? "2" : "10");
+                      }
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const text = e.clipboardData.getData("text").trim();
+                      setDays(/^\d+$/.test(text) ? text : activity === "active" ? "2" : "10");
+                    }}
+                  />
+                </div>
+                <button type="submit" disabled={loading}>
+                  {loading ? (
+                    <span className="inline-busy">
+                      <span className="spinner spinner-sm" aria-hidden="true" />
+                      Running…
+                    </span>
+                  ) : (
+                    "Run filter"
+                  )}
+                </button>
+              </form>
+            </>
+          ) : null}
         </div>
       </section>
 
       {error ? <p className="err">{error}</p> : null}
 
-      {active ? (
+      {loading ? (
+        <section className="panel loading-panel" aria-live="polite" aria-busy="true">
+          <span className="spinner" aria-hidden="true" />
+          <p className="sub" style={{ margin: 0 }}>
+            Building segment results…
+          </p>
+        </section>
+      ) : null}
+
+      {!loading && active ? (
         <section className="panel">
           <div className="row" style={{ alignItems: "center" }}>
             <div>
               <h3 style={{ margin: 0 }}>{active.name}</h3>
               <p className="sub">{active.description}</p>
               <p>
-                <strong>{active.count}</strong> matches (showing {active.members.length})
+                <strong>{active.count}</strong> total matches
+                {active.members.length < active.count
+                  ? ` · table shows first ${active.members.length}`
+                  : null}
+                {hasActiveFilters
+                  ? ` · ${visibleMembers.length} visible after column filters`
+                  : null}
+                {hasActiveFilters ? (
+                  <>
+                    {" · "}
+                    <button
+                      type="button"
+                      className="linkish"
+                      onClick={() => setColumnFilters(EMPTY_FILTERS)}
+                    >
+                      Clear column filters
+                    </button>
+                  </>
+                ) : null}
               </p>
             </div>
-            {active.id !== "custom" ? (
-              <a className="btn" href={`/api/segments/${encodeURIComponent(active.id)}/export`}>
+            {exportHref() ? (
+              <a className="btn" href={exportHref()!}>
                 Export masked CSV
               </a>
             ) : null}
           </div>
-          <table>
+
+          <table className="sortable-table">
             <thead>
               <tr>
-                <th>Ref</th>
-                <th>Masked email</th>
-                <th>Source</th>
-                <th>Last open</th>
-                <th>Score</th>
+                {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                  <th key={key}>
+                    <button
+                      type="button"
+                      className={`sort-th${sortKey === key ? " is-active" : ""}`}
+                      onClick={() => toggleSort(key)}
+                    >
+                      {SORT_LABELS[key]}
+                      {sortKey === key ? (sortDir === 1 ? " ↑" : " ↓") : ""}
+                    </button>
+                  </th>
+                ))}
+              </tr>
+              <tr className="column-filters">
+                <th>
+                  <input
+                    aria-label="Filter by ref"
+                    placeholder="Filter ref…"
+                    value={columnFilters.subscriberRef}
+                    onChange={(e) => setFilter("subscriberRef", e.target.value)}
+                  />
+                </th>
+                <th>
+                  <input
+                    aria-label="Filter by masked email"
+                    placeholder="Filter email…"
+                    value={columnFilters.maskedEmail}
+                    onChange={(e) => setFilter("maskedEmail", e.target.value)}
+                  />
+                </th>
+                <th>
+                  <select
+                    aria-label="Filter by source"
+                    value={columnFilters.acquisitionSource}
+                    onChange={(e) => setFilter("acquisitionSource", e.target.value)}
+                  >
+                    <option value="">All</option>
+                    {resultSources.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </th>
+                <th>
+                  <input
+                    aria-label="Filter by last open"
+                    placeholder="Filter date…"
+                    value={columnFilters.lastOpenDate}
+                    onChange={(e) => setFilter("lastOpenDate", e.target.value)}
+                  />
+                </th>
+                <th>
+                  <input
+                    aria-label="Filter by score"
+                    placeholder="Filter score…"
+                    value={columnFilters.engagementScore}
+                    onChange={(e) => setFilter("engagementScore", e.target.value)}
+                  />
+                </th>
               </tr>
             </thead>
             <tbody>
-              {active.members.map((m) => (
-                <tr key={m.subscriberRef}>
-                  <td className="mono">{m.subscriberRef}</td>
-                  <td>{m.maskedEmail}</td>
-                  <td>{m.acquisitionSource}</td>
-                  <td>{formatDate(m.lastOpenDate)}</td>
-                  <td>{m.engagementScore}</td>
+              {visibleMembers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="sub">
+                    No rows match these column filters.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                visibleMembers.map((m) => (
+                  <tr key={m.subscriberRef}>
+                    <td className="mono">{m.subscriberRef}</td>
+                    <td>{m.maskedEmail}</td>
+                    <td>{m.acquisitionSource}</td>
+                    <td>{formatDate(m.lastOpenDate)}</td>
+                    <td>{m.engagementScore}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </section>

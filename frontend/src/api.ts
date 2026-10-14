@@ -36,11 +36,17 @@ export const api = {
   profile: (email: string) =>
     request<ProfileResponse>(`/api/profiles?email=${encodeURIComponent(email)}`),
   segments: () => request<{ segments: SegmentMeta[] }>("/api/segments"),
-  runSegment: (id: string) => request<SegmentResult>(`/api/segments/${id}`),
-  customSegment: (source: string, inactiveDays: string) => {
+  runSegment: (id: string, days?: string) => {
+    const params = new URLSearchParams();
+    if (days) params.set("days", days);
+    const q = params.toString();
+    return request<SegmentResult>(`/api/segments/${encodeURIComponent(id)}${q ? `?${q}` : ""}`);
+  },
+  customSegment: (source: string, activity: "active" | "inactive", days: string) => {
     const params = new URLSearchParams();
     if (source) params.set("source", source);
-    if (inactiveDays) params.set("inactive_days", inactiveDays);
+    params.set("activity", activity);
+    params.set("days", days);
     return request<SegmentResult>(`/api/segments?${params}`);
   },
   chat: (message: string, conversationId: string, reset = false) =>

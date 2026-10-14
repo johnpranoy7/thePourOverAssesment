@@ -29,7 +29,14 @@ export default function LookupPage() {
         <form className="row" onSubmit={onSubmit}>
           <div>
             <label htmlFor="email">Email</label>
-            <input id="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              enterKeyHint="search"
+              autoComplete="email"
+            />
           </div>
           <button type="submit" disabled={loading}>
             {loading ? "Searching…" : "Lookup"}
