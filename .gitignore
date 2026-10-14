@@ -1,0 +1,33 @@
+# Java / Maven
+backend/target/
+backend/data/
+backend/*.db
+backend/*.mv.db
+backend/*.trace.db
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Leftover / local only
+/data/
+_legacy_next/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Env / secrets (never commit API keys)
+.env
+.env.local
+backend/.env
+backend/src/main/resources/.env
+**/application-local.yml
+*.pem
+
+# Logs
+*.log

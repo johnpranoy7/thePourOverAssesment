@@ -1,0 +1,46 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: the-pour-over-cdp
+  datasource:
+    url: jdbc:h2:file:./data/cdp;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE;DATABASE_TO_UPPER=TRUE
+    driver-class-name: org.h2.Driver
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        jdbc:
+          time_zone: UTC
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: false
+  ai:
+    openai:
+      # Populated from OS env or backend/.env via spring-dotenv
+      api-key: ${SPRING_AI_OPENAI_API_KEY}
+      chat:
+        options:
+          model: ${OPENAI_MODEL:gpt-4o-mini}
+          temperature: 0.2
+
+cdp:
+  ui-password: ${UI_PASSWORD:pour-over}
+  webhook-secret: ${WEBHOOK_SECRET:dev-webhook-secret}
+  pii-hash-salt: ${PII_HASH_SALT:dev-pii-salt}
+  today: "2026-09-28"
+  seed-on-startup: true
+
+logging:
+  level:
+    com.thepourover.cdp: INFO

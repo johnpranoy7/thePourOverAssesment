@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
+  ai:
+    openai:
+      api-key: test-key
+cdp:
+  ui-password: test
+  webhook-secret: secret
+  pii-hash-salt: salt
+  today: "2026-09-28"
+  seed-on-startup: false
