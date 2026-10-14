@@ -207,6 +207,48 @@ a:hover {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
+.snapshot-metrics {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-top: 1.15rem;
+}
+
+.snapshot-metric {
+  padding: 0.85rem 0.95rem;
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.snapshot-metric strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  color: var(--espresso);
+  line-height: 1.1;
+}
+
+.snapshot-metric__label {
+  display: block;
+  margin-top: 0.35rem;
+  font-weight: 700;
+  color: var(--espresso);
+}
+
+.snapshot-metric__hint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.acquisition-table th {
+  color: var(--espresso);
+  font-weight: 700;
+}
+
 .stat strong {
   display: block;
   font-size: 1.7rem;
