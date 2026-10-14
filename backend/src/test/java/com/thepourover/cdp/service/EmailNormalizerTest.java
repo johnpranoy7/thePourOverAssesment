@@ -20,4 +20,16 @@ class EmailNormalizerTest {
         assertNull(normalizer.normalize("   "));
         assertNull(normalizer.normalize(null));
     }
+
+    @Test
+    void gmailStripsPlusAndDots() {
+        assertEquals("janesmith@gmail.com", normalizer.normalize("Jane.Smith+news@gmail.com"));
+        assertEquals("janesmith@gmail.com", normalizer.normalize("jane.smith@googlemail.com"));
+    }
+
+    @Test
+    void nonGmailKeepsDotsAndPlus() {
+        assertEquals("jane.smith+news@thepourover.org",
+                normalizer.normalize("Jane.Smith+news@ThePourOver.org"));
+    }
 }

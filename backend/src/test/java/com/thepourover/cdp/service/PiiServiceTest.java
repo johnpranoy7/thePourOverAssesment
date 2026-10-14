@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 class PiiServiceTest {
 
     private final PiiService piiService = new PiiService(
-            new CdpProperties("secret", "salt", LocalDate.of(2026, 9, 28), false, List.of(), ""),
+            new CdpProperties("secret", "salt", LocalDate.of(2026, 9, 28), false, List.of(), "", ""),
             new EmailNormalizer());
 
     @Test
@@ -51,5 +51,18 @@ class PiiServiceTest {
     @Test
     void maskEmailKeepsDomain() {
         assertEquals("s***@thepourover.org", piiService.maskEmail("Sam@ThePourOver.ORG"));
+    }
+
+    @Test
+    void gmailAliasesShareSubscriberRef() {
+        assertEquals(
+                piiService.subscriberRef("Jane.Smith+news@gmail.com"),
+                piiService.subscriberRef("janesmith@googlemail.com"));
+    }
+
+    @Test
+    void redactsMultiLabelDomains() {
+        String redacted = piiService.redactEmailsInText("ping reader@news.co.uk now");
+        assertEquals("ping [REDACTED_EMAIL] now", redacted);
     }
 }

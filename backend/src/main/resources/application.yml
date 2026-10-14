@@ -14,8 +14,8 @@ spring:
     # Override with SPRING_DATASOURCE_URL in Docker (no AUTO_SERVER on a single container).
     url: jdbc:h2:file:./data/cdp;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE;DATABASE_TO_UPPER=TRUE
     driver-class-name: org.h2.Driver
-    username: ${DB_USERNAME:sa}
-    password: ${DB_PASSWORD:}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
@@ -36,7 +36,7 @@ spring:
   ai:
     openai:
       # Empty is OK at boot; Assistant returns 503 until a real key is set.
-      api-key: ${SPRING_AI_OPENAI_API_KEY:}
+      api-key: ${SPRING_AI_OPENAI_API_KEY}
       chat:
         options:
           model: ${OPENAI_MODEL:gpt-4o-mini}
@@ -48,8 +48,8 @@ spring:
       client:
         registration:
           github:
-            client-id: ${GITHUB_CLIENT_ID:}
-            client-secret: ${GITHUB_CLIENT_SECRET:}
+            client-id: ${GITHUB_CLIENT_ID}
+            client-secret: ${GITHUB_CLIENT_SECRET}
             client-name: GitHub
 
 cdp:
@@ -59,11 +59,12 @@ cdp:
   today: "2026-09-28"
   seed-on-startup: true
   github-allowed-logins: ${GITHUB_ALLOWED_LOGINS:}
+  # After GitHub OAuth, redirect here. Empty = same host (e.g. http://localhost:8080).
+  # For Vite dev, set CDP_UI_ORIGIN=http://localhost:5173
+  ui-origin: ${CDP_UI_ORIGIN:}
   users:
-    - username: ${CDP_USERNAME:growth}
-      password: ${CDP_PASSWORD:pour-over}
-    - username: ${RECRUITER_USERNAME:recruiter}
-      password: ${RECRUITER_PASSWORD:demo}
+    - username: ${RECRUITER_USERNAME}
+      password: ${RECRUITER_PASSWORD}
 
 springdoc:
   api-docs:

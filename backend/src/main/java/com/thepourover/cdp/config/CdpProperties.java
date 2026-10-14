@@ -16,7 +16,9 @@ public record CdpProperties(
         boolean seedOnStartup,
         List<DemoUser> users,
         /** Comma-separated GitHub logins and/or emails allowed to sign in. Empty = GitHub login off. */
-        String githubAllowedLogins
+        String githubAllowedLogins,
+        /** Optional absolute UI origin for OAuth redirects (e.g. http://localhost:5173). */
+        String uiOrigin
 ) {
     public CdpProperties {
         if (today == null) {
@@ -29,6 +31,11 @@ public record CdpProperties(
         }
         if (githubAllowedLogins == null) {
             githubAllowedLogins = "";
+        }
+        if (uiOrigin == null) {
+            uiOrigin = "";
+        } else {
+            uiOrigin = uiOrigin.trim().replaceAll("/$", "");
         }
         if (webhookSecret == null || webhookSecret.isBlank()) {
             throw new IllegalStateException("cdp.webhook-secret / WEBHOOK_SECRET must be set");

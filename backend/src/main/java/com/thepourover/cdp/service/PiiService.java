@@ -11,9 +11,9 @@ import java.util.regex.Pattern;
 @Service
 public class PiiService {
 
+    /** Word-bounded; allows multi-label domains (e.g. co.uk). */
     private static final Pattern EMAIL = Pattern.compile(
-            "[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}",
-            Pattern.CASE_INSENSITIVE);
+            "(?i)\\b[a-z0-9](?:[a-z0-9._%+-]*[a-z0-9])?@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z]{2,24}\\b");
 
     private final CdpProperties properties;
     private final EmailNormalizer emailNormalizer;

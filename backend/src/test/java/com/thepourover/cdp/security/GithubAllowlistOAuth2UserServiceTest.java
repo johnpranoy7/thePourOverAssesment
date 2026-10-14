@@ -44,7 +44,7 @@ class GithubAllowlistOAuth2UserServiceTest {
 
     private static GithubAllowlistOAuth2UserService serviceWithAllowlist(String allow) {
         CdpProperties props = new CdpProperties(
-                "secret", "salt", LocalDate.of(2026, 9, 28), false, List.of(), allow);
+                "secret", "salt", LocalDate.of(2026, 9, 28), false, List.of(), allow, "");
         return new GithubAllowlistOAuth2UserService(props);
     }
 

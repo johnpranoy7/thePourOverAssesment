@@ -23,6 +23,8 @@ export default function Layout({ onLogout }: { onLogout: () => void }) {
       /* ignore */
     }
     onLogout();
+    // Hard navigate so OAuth / stale SPA sessions always land on the current login page.
+    window.location.assign("/login");
   }
 
   return (

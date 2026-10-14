@@ -45,10 +45,56 @@ class WebhookIngestServiceTest {
 
     @Test
     void dedupesByEventId() {
+        Subscriber sub = seedKnownUser("u_dedupe", "dedupe@example.com");
         WebhookPayload payload = new WebhookPayload(
-                "evt_1", "app_open", null, "d_1", "2026-09-28T10:00:00Z", Map.of());
-        assertFalse(webhookIngestService.ingest(payload).duplicate());
-        assertTrue(webhookIngestService.ingest(payload).duplicate());
+                "evt_1", "app_open", "u_dedupe", "d_1", "2026-09-28T10:00:00Z", Map.of());
+        var first = webhookIngestService.ingest(payload);
+        assertFalse(first.duplicate());
+        assertEquals(sub.getId(), first.subscriberId());
+        var second = webhookIngestService.ingest(payload);
+        assertTrue(second.duplicate());
+        assertEquals(sub.getId(), second.subscriberId());
+    }
+
+    @Test
+    void sharedDeviceKeepsFirstDeviceLink() {
+        Subscriber first = seedKnownUser("u_a", "a@example.com");
+        Subscriber second = seedKnownUser("u_b", "b@example.com");
+
+        webhookIngestService.ingest(new WebhookPayload(
+                "evt_a", "login", "u_a", "d_shared", "2026-09-28T10:00:00Z", Map.of()));
+        webhookIngestService.ingest(new WebhookPayload(
+                "evt_b", "login", "u_b", "d_shared", "2026-09-28T11:00:00Z", Map.of()));
+        webhookIngestService.ingest(new WebhookPayload(
+                "evt_anon", "app_open", null, "d_shared", "2026-09-28T12:00:00Z", Map.of()));
+
+        assertEquals(first.getId(),
+                deviceLinkRepository.findById("d_shared").orElseThrow().getSubscriber().getId());
+        assertEquals(first.getId(),
+                appEventRepository.findByEventId("evt_anon").orElseThrow().getSubscriber().getId());
+        assertEquals(second.getId(),
+                appEventRepository.findByEventId("evt_b").orElseThrow().getSubscriber().getId());
+    }
+
+    @Test
+    void upgradesStubWhenAppUserEmailMatchesNewsletterSubscriber() {
+        Subscriber real = new Subscriber();
+        real.setEmail("real@example.com");
+        real.setStub(false);
+        subscriberRepository.save(real);
+
+        webhookIngestService.ingest(new WebhookPayload(
+                "evt_stub_first", "login", "u_upgrade", "d_up", "2026-09-28T10:00:00Z", Map.of()));
+        assertTrue(subscriberRepository.findByEmail("stub+u_upgrade@cdp.local").orElseThrow().isStub());
+
+        AppUser user = appUserRepository.findById("u_upgrade").orElseThrow();
+        user.setEmail("real@example.com");
+        appUserRepository.save(user);
+
+        var result = webhookIngestService.ingest(new WebhookPayload(
+                "evt_stub_second", "app_open", "u_upgrade", "d_up", "2026-09-28T11:00:00Z", Map.of()));
+        assertEquals(real.getId(), result.subscriberId());
+        assertFalse(appUserRepository.findById("u_upgrade").orElseThrow().isStub());
     }
 
     @Test

@@ -102,10 +102,13 @@ public class SecurityConfig {
         if (OAuth2ClientConfig.hasRegistrations(clientRegistrationRepository)
                 && cdpProperties.githubLoginEnabled()) {
             OAuth2UserService<OAuth2UserRequest, OAuth2User> userService = githubAllowlistOAuth2UserService;
+            String origin = cdpProperties.uiOrigin();
+            String successUrl = origin.isBlank() ? "/" : origin + "/";
+            String failureUrl = origin.isBlank() ? "/login?error=oauth" : origin + "/login?error=oauth";
             http.oauth2Login(oauth -> oauth
                     .userInfoEndpoint(userInfo -> userInfo.userService(userService))
-                    .defaultSuccessUrl("/", true)
-                    .failureUrl("/login?error=oauth"));
+                    .defaultSuccessUrl(successUrl, true)
+                    .failureUrl(failureUrl));
         }
 
         return http.build();

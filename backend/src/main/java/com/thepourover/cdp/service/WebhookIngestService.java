@@ -11,6 +11,7 @@ import com.thepourover.cdp.repo.DeviceLinkRepository;
 import com.thepourover.cdp.repo.SubscriberRepository;
 import com.thepourover.cdp.web.dto.Dtos.WebhookPayload;
 import com.thepourover.cdp.web.dto.Dtos.WebhookResponse;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,7 +52,7 @@ public class WebhookIngestService {
     public WebhookResponse ingest(WebhookPayload payload) {
         validate(payload);
         if (appEventRepository.existsByEventId(payload.event_id())) {
-            return new WebhookResponse(true, true, null);
+            return duplicateResponse(payload.event_id());
         }
 
         Subscriber subscriber = null;
@@ -61,7 +62,8 @@ public class WebhookIngestService {
         if (userId != null) {
             subscriber = resolveUser(userId);
             mergeAnonymousDeviceEvents(deviceId, subscriber);
-            upsertDeviceLink(deviceId, subscriber);
+            // First identified user on a device keeps the DeviceLink (shared-device safe).
+            upsertDeviceLinkFirstWins(deviceId, subscriber);
         } else {
             DeviceLink link = deviceLinkRepository.findById(deviceId).orElse(null);
             if (link != null) {
@@ -77,9 +79,23 @@ public class WebhookIngestService {
         event.setTimestamp(parseTimestamp(payload.timestamp()));
         event.setPropertiesJson(writeProps(payload.properties()));
         event.setSubscriber(subscriber);
-        appEventRepository.save(event);
+
+        try {
+            appEventRepository.saveAndFlush(event);
+        } catch (DataIntegrityViolationException e) {
+            // Concurrent insert of the same event_id.
+            return duplicateResponse(payload.event_id());
+        }
 
         return new WebhookResponse(true, false, subscriber == null ? null : subscriber.getId());
+    }
+
+    private WebhookResponse duplicateResponse(String eventId) {
+        Long subscriberId = appEventRepository.findByEventId(eventId)
+                .map(AppEvent::getSubscriber)
+                .map(Subscriber::getId)
+                .orElse(null);
+        return new WebhookResponse(true, true, subscriberId);
     }
 
     private void validate(WebhookPayload payload) {
@@ -96,9 +112,34 @@ public class WebhookIngestService {
     }
 
     private Subscriber resolveUser(String userId) {
-        return appUserRepository.findById(userId).map(AppUser::getSubscriber).map(s -> {
-            if (s != null) {
-                return s;
+        return appUserRepository.findById(userId).map(user -> {
+            Subscriber existing = user.getSubscriber();
+            if (existing != null && !existing.isStub()) {
+                return existing;
+            }
+
+            String email = emailNormalizer.normalize(user.getEmail());
+            if (email != null && !email.startsWith("stub+")) {
+                Subscriber real = subscriberRepository.findByEmail(email).orElse(null);
+                if (real != null && !real.isStub()) {
+                    user.setSubscriber(real);
+                    user.setStub(false);
+                    if (user.getEmail() == null) {
+                        user.setEmail(email);
+                    }
+                    appUserRepository.save(user);
+                    return real;
+                }
+                if (real != null) {
+                    user.setSubscriber(real);
+                    user.setStub(real.isStub());
+                    appUserRepository.save(user);
+                    return real;
+                }
+            }
+
+            if (existing != null) {
+                return existing;
             }
             return createStubForUser(userId);
         }).orElseGet(() -> createStubForUser(userId));
@@ -132,9 +173,15 @@ public class WebhookIngestService {
         appEventRepository.attachDeviceEvents(deviceId, subscriber);
     }
 
-    private void upsertDeviceLink(String deviceId, Subscriber subscriber) {
-        DeviceLink link = deviceLinkRepository.findById(deviceId).orElseGet(DeviceLink::new);
-        link.setDeviceId(deviceId);
+    private void upsertDeviceLinkFirstWins(String deviceId, Subscriber subscriber) {
+        DeviceLink link = deviceLinkRepository.findById(deviceId).orElse(null);
+        if (link != null && link.getSubscriber() != null) {
+            return;
+        }
+        if (link == null) {
+            link = new DeviceLink();
+            link.setDeviceId(deviceId);
+        }
         link.setSubscriber(subscriber);
         deviceLinkRepository.save(link);
     }

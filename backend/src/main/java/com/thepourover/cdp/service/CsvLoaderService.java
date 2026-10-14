@@ -12,7 +12,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -21,6 +20,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -131,22 +131,34 @@ public class CsvLoaderService {
                     continue;
                 }
                 String email = emailNormalizer.normalize(row.get("email"));
-                AppUser user = new AppUser();
-                user.setUserId(userId);
-                user.setEmail(email);
-                user.setCreatedDate(parseDate(row.get("created_at")));
-                user.setStub(false);
-                if (email != null) {
-                    subscriberRepository.findByEmail(email).ifPresentOrElse(user::setSubscriber, () -> {
-                        Subscriber s = new Subscriber();
-                        s.setEmail(email);
-                        s.setStub(false);
-                        s.setSignupDate(user.getCreatedDate());
-                        user.setSubscriber(subscriberRepository.save(s));
-                    });
+                LocalDate created = parseDate(row.get("created_at"));
+
+                AppUser user = appUserRepository.findById(userId).orElseGet(AppUser::new);
+                boolean isNew = user.getUserId() == null;
+                if (isNew) {
+                    user.setUserId(userId);
+                    user.setStub(false);
+                    user.setEmail(email);
+                    user.setCreatedDate(created);
+                    count++;
+                } else {
+                    // Duplicate user_id: first row wins email; fill gaps / prefer earlier created_at.
+                    log.debug("Duplicate app user_id {} — merging into existing row", userId);
+                    if (user.getEmail() == null && email != null) {
+                        user.setEmail(email);
+                    }
+                    if (user.getCreatedDate() == null && created != null) {
+                        user.setCreatedDate(created);
+                    } else if (user.getCreatedDate() != null && created != null
+                            && created.isBefore(user.getCreatedDate())) {
+                        user.setCreatedDate(created);
+                    }
+                }
+
+                if (user.getEmail() != null && user.getSubscriber() == null) {
+                    user.setSubscriber(findOrCreateInferredSubscriber(user.getEmail(), user.getCreatedDate()));
                 }
                 appUserRepository.save(user);
-                count++;
             }
         } catch (Exception e) {
             throw new IllegalStateException("Failed to load app_users.csv", e);
@@ -156,6 +168,8 @@ public class CsvLoaderService {
 
     private int loadWebEvents() {
         int count = 0;
+        // First subscriber linked for a visitor wins for the whole visitor_id.
+        Map<String, Subscriber> visitorOwner = new HashMap<>();
         try (Reader reader = open("data/web_events.csv");
              CSVParser parser = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true)
                      .setIgnoreEmptyLines(true).setTrim(true).build().parse(reader)) {
@@ -172,14 +186,22 @@ public class CsvLoaderService {
                 event.setUtmSource(emptyToNull(row.get("utm_source")));
                 event.setEmail(email);
 
-                Subscriber subscriber = null;
-                if (email != null) {
-                    subscriber = subscriberRepository.findByEmail(email).orElseGet(() -> {
-                        Subscriber s = new Subscriber();
-                        s.setEmail(email);
-                        s.setStub(false);
-                        return subscriberRepository.save(s);
-                    });
+                Subscriber subscriber = visitorOwner.get(visitorId);
+                if (subscriber == null) {
+                    Subscriber fromDb = firstLinkedSubscriber(visitorId);
+                    if (fromDb != null) {
+                        subscriber = fromDb;
+                        visitorOwner.put(visitorId, subscriber);
+                    }
+                }
+
+                if (subscriber == null && email != null) {
+                    subscriber = findOrCreateInferredSubscriber(email, null);
+                    visitorOwner.put(visitorId, subscriber);
+                }
+
+                // Later different emails on the same visitor do not split identity.
+                if (subscriber != null) {
                     event.setSubscriber(subscriber);
                 }
                 webEventRepository.save(event);
@@ -192,6 +214,31 @@ public class CsvLoaderService {
             throw new IllegalStateException("Failed to load web_events.csv", e);
         }
         return count;
+    }
+
+    /**
+     * Newsletter rows from subscribers.csv are stub=false. Profiles created only from
+     * app/web sightings are stub=true (inferred) so they do not inflate newsletter counts.
+     */
+    private Subscriber findOrCreateInferredSubscriber(String email, LocalDate signupHint) {
+        return subscriberRepository.findByEmail(email).orElseGet(() -> {
+            Subscriber s = new Subscriber();
+            s.setEmail(email);
+            s.setStub(true);
+            s.setStatus("inferred");
+            s.setSignupDate(signupHint);
+            return subscriberRepository.save(s);
+        });
+    }
+
+    private Subscriber firstLinkedSubscriber(String visitorId) {
+        List<WebEvent> prior = webEventRepository.findByVisitorId(visitorId);
+        for (WebEvent e : prior) {
+            if (e.getSubscriber() != null) {
+                return e.getSubscriber();
+            }
+        }
+        return null;
     }
 
     private Reader open(String classpath) throws Exception {
