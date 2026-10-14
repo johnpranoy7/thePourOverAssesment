@@ -24,10 +24,8 @@ public record CdpProperties(
         if (today == null) {
             today = LocalDate.of(2026, 9, 28);
         }
-        if (users == null || users.isEmpty()) {
-            users = List.of(
-                    new DemoUser("growth", "pour-over"),
-                    new DemoUser("recruiter", "demo"));
+        if (users == null) {
+            users = List.of();
         }
         if (githubAllowedLogins == null) {
             githubAllowedLogins = "";
