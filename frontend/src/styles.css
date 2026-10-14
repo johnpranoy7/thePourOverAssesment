@@ -157,26 +157,34 @@ a:hover {
 .nav__logout {
   flex-shrink: 0;
   margin-left: auto;
-  border: 1px solid var(--line);
+  border: 1px solid var(--espresso);
   border-radius: 999px;
   padding: 0.55rem 1rem;
-  background: transparent;
-  color: var(--espresso);
+  background: var(--espresso);
+  color: #fff8f0;
   font-family: var(--font-body);
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255, 248, 240, 0.08) inset;
   transition:
-    background-color 0.22s ease,
-    border-color 0.22s ease,
-    color 0.22s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.25s ease,
     transform 0.2s ease;
 }
 
 .nav__logout:hover {
-  background: var(--espresso);
-  border-color: var(--espresso);
-  color: #fff8f0;
+  background: var(--roast);
+  border-color: var(--roast);
   transform: translateY(-1px);
+  box-shadow:
+    0 1px 0 rgba(255, 248, 240, 0.1) inset,
+    0 6px 14px rgba(58, 36, 24, 0.22);
+}
+
+.nav__logout:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15) inset;
 }
 
 .page {
