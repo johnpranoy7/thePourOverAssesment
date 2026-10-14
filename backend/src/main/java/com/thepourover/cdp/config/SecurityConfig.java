@@ -42,7 +42,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/webhooks/app").permitAll()
                         .requestMatchers("/h2-console", "/h2-console/**").permitAll()
                         .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico",
-                                "/login", "/lookup", "/segments", "/assistant").permitAll()
+                                "/login", "/lookup", "/segments", "/analytics", "/assistant").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(ex -> ex

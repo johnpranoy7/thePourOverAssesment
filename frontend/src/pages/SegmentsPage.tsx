@@ -37,7 +37,8 @@ export default function SegmentsPage() {
   return (
     <>
       <section className="panel">
-        <h2 style={{ marginTop: 0 }}>Build a segment</h2>
+        <h2 style={{ marginTop: 0 }}>Analytics</h2>
+        <p className="sub">Preset Growth segments and custom filters</p>
         <div className="grid">
           {list.map((s) => (
             <button key={s.id} type="button" className="secondary" onClick={() => runPreset(s.id)}>

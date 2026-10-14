@@ -39,7 +39,8 @@ export default function App() {
       >
         <Route path="/" element={<SnapshotPage />} />
         <Route path="/lookup" element={<LookupPage />} />
-        <Route path="/segments" element={<SegmentsPage />} />
+        <Route path="/analytics" element={<SegmentsPage />} />
+        <Route path="/segments" element={<Navigate to="/analytics" replace />} />
         <Route path="/assistant" element={<AssistantPage />} />
       </Route>
       <Route path="*" element={<Navigate to={auth ? "/" : "/login"} replace />} />
