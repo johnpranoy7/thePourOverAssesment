@@ -15,7 +15,12 @@ public final class Dtos {
     public record AuthResponse(boolean authenticated, String username) {
     }
 
-    public record AuthConfigResponse(boolean githubEnabled, String githubAuthorizationUrl) {
+    /** Demo credentials are intentional for the assessment login shortcut. */
+    public record AuthConfigResponse(
+            boolean githubEnabled,
+            String githubAuthorizationUrl,
+            String demoUsername,
+            String demoPassword) {
     }
 
     public record WebEventView(String visitorId, String page, Instant timestamp, String utmSource) {

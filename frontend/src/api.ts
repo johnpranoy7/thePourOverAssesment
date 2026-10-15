@@ -78,6 +78,8 @@ export const api = {
 export type AuthConfig = {
   githubEnabled: boolean;
   githubAuthorizationUrl: string | null;
+  demoUsername: string | null;
+  demoPassword: string | null;
 };
 
 export type AuthMe = {

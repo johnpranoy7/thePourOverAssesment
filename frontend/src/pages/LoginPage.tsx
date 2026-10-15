@@ -48,7 +48,14 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
     api
       .authConfig()
       .then(setConfig)
-      .catch(() => setConfig({ githubEnabled: false, githubAuthorizationUrl: null }));
+      .catch(() =>
+        setConfig({
+          githubEnabled: false,
+          githubAuthorizationUrl: null,
+          demoUsername: null,
+          demoPassword: null,
+        }),
+      );
   }, []);
 
   useEffect(() => {
@@ -71,76 +78,98 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
     }
   }
 
+  function fillDemoCredentials() {
+    if (!config?.demoUsername) {
+      return;
+    }
+    setUsername(config.demoUsername);
+    setPassword(config.demoPassword ?? "");
+    setError("");
+  }
+
   const showGithub = !!(config?.githubEnabled && config.githubAuthorizationUrl);
+  const showDemoFill = !!(config?.demoUsername && config.demoPassword != null);
 
   return (
     <div className="login-wrap">
-      <div className="panel login-card">
-        <header className="login-card__header">
-          <h1 className="brand">The Pour Over CDP</h1>
-          <p className="sub">Sign in to browse the Growth demo.</p>
-        </header>
+      <div className="login-layout">
+        {showDemoFill ? (
+          <button
+            type="button"
+            className="login-recruiter"
+            onClick={fillDemoCredentials}
+          >
+            Recruiters — click here
+          </button>
+        ) : null}
 
-        {error ? <p className="err login-card__error">{error}</p> : null}
+        <div className="panel login-card">
+          <header className="login-card__header">
+            <h1 className="brand">The Pour Over CDP</h1>
+            <p className="sub">Sign in to browse the Growth demo.</p>
+          </header>
 
-        <form className="login-form" onSubmit={onSubmit}>
-          <div className="login-credentials">
-            <div className="login-field">
-              <label htmlFor="username">Username</label>
-              <input
-                id="username"
-                type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username"
-                autoFocus
-                required
-              />
-            </div>
-            <div className="login-field">
-              <label htmlFor="password">Password</label>
-              <div className="password-input">
+          {error ? <p className="err login-card__error">{error}</p> : null}
+
+          <form className="login-form" onSubmit={onSubmit}>
+            <div className="login-credentials">
+              <div className="login-field">
+                <label htmlFor="username">Username</label>
                 <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password"
+                  id="username"
+                  type="text"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Username"
+                  autoFocus
                   required
                 />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  title={showPassword ? "Hide password" : "Show password"}
-                >
-                  <EyeIcon open={showPassword} />
-                </button>
+              </div>
+              <div className="login-field">
+                <label htmlFor="password">Password</label>
+                <div className="password-input">
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    <EyeIcon open={showPassword} />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-          <button type="submit" className="login-submit" disabled={loading}>
-            {loading ? "Checking…" : "Sign in"}
-          </button>
-        </form>
+            <button type="submit" className="login-submit" disabled={loading}>
+              {loading ? "Checking…" : "Sign in"}
+            </button>
+          </form>
 
-        {showGithub ? (
-          <div className="login-alt">
-            <p className="login-divider">or</p>
-            <a
-              className="github-btn"
-              href={config!.githubAuthorizationUrl!}
-              aria-label="Continue with GitHub"
-              title="Continue with GitHub"
-            >
-              <GitHubIcon />
-              <span>Continue with GitHub</span>
-            </a>
-          </div>
-        ) : null}
+          {showGithub ? (
+            <div className="login-alt">
+              <p className="login-divider">or</p>
+              <a
+                className="github-btn"
+                href={config!.githubAuthorizationUrl!}
+                aria-label="Continue with GitHub"
+                title="Continue with GitHub"
+              >
+                <GitHubIcon />
+                <span>Continue with GitHub</span>
+              </a>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

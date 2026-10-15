@@ -54,9 +54,15 @@ public class AuthController {
         boolean github = OAuth2ClientConfig.hasRegistrations(clientRegistrationRepository)
                 && clientRegistrationRepository.findByRegistrationId("github") != null
                 && cdpProperties.githubLoginEnabled();
+        var demo = cdpProperties.users().stream()
+                .filter(u -> StringUtils.hasText(u.username()))
+                .findFirst()
+                .orElse(null);
         return new AuthConfigResponse(
                 github,
-                github ? "/oauth2/authorization/github" : null);
+                github ? "/oauth2/authorization/github" : null,
+                demo == null ? null : demo.username(),
+                demo == null ? null : demo.password());
     }
 
     @PostMapping("/login")
