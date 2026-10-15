@@ -3,7 +3,7 @@ import { api, ProfileResponse } from "../api";
 import { formatDate } from "../formatDate";
 
 export default function LookupPage() {
-  const [email, setEmail] = useState("reader00000@example.com");
+  const [email, setEmail] = useState("matthew.hall204@gmail.com");
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);

@@ -8,6 +8,7 @@ Espresso-shot customer data platform for The Pour Over developer assessment.
 
 - **App UI:** `https://pourover.johnpranoy7.dev/` (or your host)
 - **Webhook:** `https://pourover.johnpranoy7.dev/webhooks/app`
+- **Recruiters:** see [RECRUITERS.md](RECRUITERS.md) for a short walkthrough
 
 ## What it does
 
@@ -129,7 +130,7 @@ curl -s -X POST http://localhost:8080/webhooks/app ^
   -d "{\"event_id\":\"evt_demo_2\",\"event\":\"login\",\"user_id\":\"u_00000000\",\"device_id\":\"d_demo\",\"timestamp\":\"2026-09-28T14:00:00Z\",\"properties\":{}}"
 ```
 
-Then **Lookup** `reader00000@example.com` (fixture linked to `u_00000000`).
+Then **Lookup** `matthew.hall204@gmail.com` (newsletter + app user + web visit in the seed CSVs).
 
 ## Auth model
 
