@@ -65,4 +65,31 @@ class PiiServiceTest {
         String redacted = piiService.redactEmailsInText("ping reader@news.co.uk now");
         assertEquals("ping [REDACTED_EMAIL] now", redacted);
     }
+
+    @Test
+    void redactsLocalhostAndIpHosts() {
+        assertEquals("mail [REDACTED_EMAIL]", piiService.redactEmailsInText("mail user@localhost"));
+        assertEquals("mail [REDACTED_EMAIL]", piiService.redactEmailsInText("mail user@192.168.1.10"));
+        assertFalse(piiService.containsEmail(piiService.redactEmailsInText("user@localhost")));
+    }
+
+    @Test
+    void redactsObfuscatedEmails() {
+        assertEquals(
+                "reach [REDACTED_EMAIL] please",
+                piiService.redactEmailsInText("reach sam (at) thepourover.org please"));
+        assertEquals(
+                "reach [REDACTED_EMAIL] please",
+                piiService.redactEmailsInText("reach sam[at]thepourover.org please"));
+        assertEquals(
+                "reach [REDACTED_EMAIL] please",
+                piiService.redactEmailsInText("reach sam @ thepourover.org please"));
+    }
+
+    @Test
+    void redactsOddLocalPartsLoosePass() {
+        String redacted = piiService.redactEmailsInText("bad end-with-dot.@evil.com here");
+        assertFalse(piiService.containsEmail(redacted));
+        assertTrue(redacted.contains("[REDACTED_EMAIL]"));
+    }
 }

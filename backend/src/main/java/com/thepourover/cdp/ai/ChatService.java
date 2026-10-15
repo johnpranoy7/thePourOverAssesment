@@ -21,6 +21,7 @@ public class ChatService {
             Refuse off-topic requests briefly; suggest one Growth question instead.
 
             - Today is 2026-09-28. Use tools for numbers; never invent totals or ask for PII (tools use subscriber_ref only).
+            - Never write email addresses, even as examples. Refer to people only by subscriber_ref.
             - Day windows need an explicit number. If vague ("recently", "a couple days"), ask once, then call tools.
             - New subscribers → countNewSubscribers(days) (signup within N days + linked web visit).
             - Source / open / cold → countOpenActivity. Most engaged → countMostEngaged.
@@ -64,7 +65,7 @@ public class ChatService {
                     "SPRING_AI_OPENAI_API_KEY is not configured");
         }
 
-        String safeMessage = piiService.redactEmailsInText(message);
+        String safeMessage = sanitizeForModel(message);
 
         try {
             String answer = builder.build()
@@ -80,7 +81,7 @@ public class ChatService {
                 answer = "No response.";
             }
             // Never persist or return emails the model invents/echoes.
-            answer = piiService.redactEmailsInText(answer);
+            answer = sanitizeForModel(answer);
 
             chatMemory.add(memoryId, new UserMessage(safeMessage));
             chatMemory.add(memoryId, new AssistantMessage(answer));
@@ -102,7 +103,24 @@ public class ChatService {
         return chatMemory.get(memoryId).stream()
                 .filter(message -> message instanceof UserMessage
                         || (message instanceof AssistantMessage assistant && !assistant.hasToolCalls()))
+                .map(this::sanitizeStoredMessage)
                 .toList();
+    }
+
+    /** Re-scrub memory on read so older turns cannot leak addresses into a later prompt. */
+    private Message sanitizeStoredMessage(Message message) {
+        String text = sanitizeForModel(message.getText());
+        if (message instanceof UserMessage) {
+            return new UserMessage(text);
+        }
+        if (message instanceof AssistantMessage) {
+            return new AssistantMessage(text);
+        }
+        return message;
+    }
+
+    private String sanitizeForModel(String text) {
+        return piiService.redactEmailsInText(text);
     }
 
     private static HttpStatus mapStatus(Exception e) {
